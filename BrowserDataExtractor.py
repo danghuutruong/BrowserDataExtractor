@@ -9,8 +9,8 @@ import zipfile
 import requests
 import socket
 
-bot_token = '7481960829:AAFWLAti2xagba2MyBWDHBTChsR3__Ks2gM'
-chat_id = '-1002159253602'
+bot_token = 'ID-TOKEN'
+chat_id = 'ID-CHAT'
 
 def check_internet_connection():
     try:
