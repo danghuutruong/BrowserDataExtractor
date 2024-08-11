@@ -51,8 +51,6 @@ If you encounter any issues or have questions, please contact me or check the of
 
 ---
 
-Feel free to adjust the title or any specific details as needed.
-
 VI
 ### Hướng Dẫn Sử Dụng Browser Data Extractor
 
@@ -106,4 +104,3 @@ Nếu bạn gặp bất kỳ vấn đề nào hoặc có câu hỏi, hãy liên 
 
 ---
 
-Bạn có thể thay đổi tên của bài viết hoặc các chi tiết cụ thể nếu cần.
