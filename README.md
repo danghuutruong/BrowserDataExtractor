@@ -1,6 +1,8 @@
 EN
 ### Guide for Using BrowserDataExtractor.py
 
+Note that this code only works to retrieve passwords that you have saved in your preferred browser, so it will only access those saved passwords.
+
 **`Browser Data Extractor`** is a powerful tool for collecting data from popular web browsers. It can retrieve information about passwords and browsing history from multiple browsers and send the results as a zip file via Telegram.
 
 #### **Key Features:**
@@ -53,6 +55,8 @@ If you encounter any issues or have questions, please contact me or check the of
 
 VI
 ### Hướng Dẫn Sử Dụng Browser Data Extractor
+
+Lưu ý rằng mã này chỉ hoạt động để truy xuất mật khẩu mà bạn đã lưu trong trình duyệt ưa thích của mình, vì vậy nó sẽ chỉ truy cập vào các mật khẩu đã lưu đó.
 
 **`BrowserDataExtractor.py`** là một công cụ mạnh mẽ để thu thập dữ liệu từ các trình duyệt web phổ biến. Nó có khả năng lấy thông tin về mật khẩu, lịch sử duyệt web từ nhiều trình duyệt khác nhau và gửi kết quả dưới dạng tệp zip qua Telegram.
 
