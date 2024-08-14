@@ -1,4 +1,5 @@
 EN
+---
 ### Guide for Using BrowserDataExtractor.py
 
 Note that this code only works to retrieve passwords that you have saved in your preferred browser, so it will only access those saved passwords.
@@ -54,6 +55,7 @@ If you encounter any issues or have questions, please contact me or check the of
 ---
 
 VI
+---
 ### Hướng Dẫn Sử Dụng Browser Data Extractor
 
 Lưu ý rằng mã này chỉ hoạt động để truy xuất mật khẩu mà bạn đã lưu trong trình duyệt ưa thích của mình, vì vậy nó sẽ chỉ truy cập vào các mật khẩu đã lưu đó.
