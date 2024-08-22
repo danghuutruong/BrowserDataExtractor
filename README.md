@@ -1,5 +1,9 @@
 EN
 ---
+New Update
+Added System Configuration Information: The script now collects and saves system configuration details to system_info.txt.
+Added Installed Applications List: The script now lists installed applications and saves this information to apps_info.txt.
+
 ### Guide for Using BrowserDataExtractor.py
 
 Note that this code only works to retrieve passwords that you have saved in your preferred browser, so it will only access those saved passwords.
@@ -59,6 +63,10 @@ If you encounter any issues or have questions, please contact me or check the of
 
 VI
 ---
+Cập Nhật Mới
+Thêm chức năng thu thập thông tin cấu hình máy tính: Script giờ đây sẽ lưu thông tin cấu hình máy tính vào system_info.txt.
+Thêm chức năng liệt kê các ứng dụng đã cài đặt: Danh sách các ứng dụng đã cài đặt sẽ được lưu vào apps_info.txt.
+
 ### Hướng Dẫn Sử Dụng Browser Data Extractor
 
 Lưu ý rằng mã này chỉ hoạt động để truy xuất mật khẩu mà bạn đã lưu trong trình duyệt ưa thích của mình, vì vậy nó sẽ chỉ truy cập vào các mật khẩu đã lưu đó.
