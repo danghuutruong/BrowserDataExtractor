@@ -28,7 +28,7 @@ Get Bot channel ID
 
 1. **Install the necessary libraries:**
    ```bash
-   pip install requests pywin32 pycryptodome
+   pip install requests pywin32 pycryptodome pyinstaller
    ```
 
 2. **Save the source code to a file named `BrowserDataExtractor.py`.**
@@ -91,7 +91,7 @@ lấy ID kênh bot
 
 1. **Cài đặt các thư viện cần thiết:**
    ```bash
-   pip install requests pywin32 pycryptodome
+   pip install requests pywin32 pycryptodome pyinstaller
    ```
 
 2. **Lưu mã nguồn vào tệp `BrowserDataExtractor.py`.**
