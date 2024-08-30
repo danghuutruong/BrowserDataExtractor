@@ -1,8 +1,12 @@
 EN
 ---
 New Update
-Added System Configuration Information: The script now collects and saves system configuration details to system_info.txt.
-Added Installed Applications List: The script now lists installed applications and saves this information to apps_info.txt.
+
+I have updated and added the following new features:
+
+Bug fixes and file size optimization
+Cookie retrieval
+We have removed the functions related to collecting computer configuration information and listing installed applications. However, don’t worry, we may update these features in the future as they had many other issues.
 
 ### Guide for Using BrowserDataExtractor.py
 
@@ -64,8 +68,12 @@ If you encounter any issues or have questions, please contact me or check the of
 VI
 ---
 Cập Nhật Mới
-Thêm chức năng thu thập thông tin cấu hình máy tính: Script giờ đây sẽ lưu thông tin cấu hình máy tính vào system_info.txt.
-Thêm chức năng liệt kê các ứng dụng đã cài đặt: Danh sách các ứng dụng đã cài đặt sẽ được lưu vào apps_info.txt.
+
+Tôi đã thực hiện cập nhật và thêm các tính năng mới như sau:
+
+Khắc phục lỗi và tối ưu hóa dung lượng tệp
+Lấy cookies
+Chúng tôi đã gỡ bỏ các chức năng liên quan đến thu thập thông tin cấu hình máy tính và liệt kê các ứng dụng đã cài đặt. Tuy nhiên, đừng lo lắng, chúng tôi có thể cập nhật lại những chức năng này trong tương lai vì chúng còn nhiều lỗi khác.
 
 ### Hướng Dẫn Sử Dụng Browser Data Extractor
 
