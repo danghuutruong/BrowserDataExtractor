@@ -1,6 +1,6 @@
 EN
 ---
-New Update
+New Update V2
 
 I have updated and added the following new features:
 
@@ -67,7 +67,7 @@ If you encounter any issues or have questions, please contact me or check the of
 
 VI
 ---
-Cập Nhật Mới
+Cập Nhật Mới V2
 
 Tôi đã thực hiện cập nhật và thêm các tính năng mới như sau:
 
