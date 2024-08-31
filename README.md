@@ -18,10 +18,9 @@ Get Bot channel ID
 **`Browser Data Extractor`** is a powerful tool for collecting data from popular web browsers. It can retrieve information about passwords and browsing history from multiple browsers and send the results as a zip file via Telegram.
 
 #### **Key Features:**
-- Collects passwords and browsing history from browsers such as Google Chrome, Coc Coc, Microsoft Edge, Opera, Brave, Vivaldi, Epic Privacy Browser, Comodo Dragon, Mozilla Firefox, and Safari.
+- Collects passwords and browsing history from browsers such as Google Chrome, Coc Coc, Microsoft Edge, Opera, Brave, Vivaldi, Epic Privacy Browser, Comodo Dragon, Mozilla Firefox.
 - Saves data to text files in a structured directory format.
 - Creates a zip file containing all the data and sends it via Telegram.
-- Checks for an internet connection before attempting to send data.
 
 #### **Requirements:**
 - Python 3.x
@@ -85,10 +84,9 @@ lấy ID kênh bot
 **`BrowserDataExtractor.py`** là một công cụ mạnh mẽ để thu thập dữ liệu từ các trình duyệt web phổ biến. Nó có khả năng lấy thông tin về mật khẩu, lịch sử duyệt web từ nhiều trình duyệt khác nhau và gửi kết quả dưới dạng tệp zip qua Telegram.
 
 #### **Các Tính Năng Chính:**
-- Thu thập mật khẩu và lịch sử duyệt web từ các trình duyệt như Google Chrome, Coc Coc, Microsoft Edge, Opera, Brave, Vivaldi, Epic Privacy Browser, Comodo Dragon, Mozilla Firefox, và Safari.
+- Thu thập mật khẩu và lịch sử duyệt web từ các trình duyệt như Google Chrome, Coc Coc, Microsoft Edge, Opera, Brave, Vivaldi, Epic Privacy Browser, Comodo Dragon, Mozilla Firefox.
 - Lưu trữ dữ liệu vào các tệp văn bản theo cấu trúc thư mục.
 - Tạo tệp zip chứa tất cả dữ liệu và gửi qua Telegram.
-- Kiểm tra kết nối mạng trước khi thực hiện gửi dữ liệu.
 
 #### **Yêu Cầu:**
 - Python 3.x
