@@ -4,12 +4,12 @@ New Update V2.2
 
 I have made updates and improvements with the following features:
 
-Bug fixes and performance optimization.
-Added functionality to retrieve your Wi-Fi information and IP address.
-Updated the computer configuration information collection feature.
-Significant upgrade in retrieving browser history, cookies, and passwords.
-Retrieve common files.
-Reintroduced the old feature of network checking before sending.
+- Bug fixes and performance optimization.
+- Added functionality to retrieve your Wi-Fi information and IP address.
+- Updated the computer configuration information collection feature.
+- Significant upgrade in retrieving browser history, cookies, and passwords.
+- Retrieve common files.
+- Reintroduced the old feature of network checking before sending.
 
 ### Guide for Using BrowserDataExtractor.py
 
