@@ -1,3 +1,5 @@
+![visitors](https://visitor-badge.glitch.me/badge?page_id=danghuutruong.BrowserDataExtractor&left_color=green&right_color=red)
+
 
 EN
 ---
