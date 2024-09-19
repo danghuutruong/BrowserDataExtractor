@@ -1,4 +1,4 @@
-![Visitor Badge](https://visitor-badge.glitch.me/badge?page_id=danghuutruong.BrowserDataExtractor)
+![Visitor Badge](https://img.shields.io/badge/dynamic/json?color=blue&label=visits&query=value&url=https://api.countapi.xyz/hit/danghuutruong.BrowserDataExtractor)
 
 EN
 ---
