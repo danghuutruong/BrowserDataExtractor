@@ -1,5 +1,3 @@
-![Tester và User](https://i0.wp.com/comedymajors.com/wp-content/uploads/2024/02/tester-and-user.jpg?resize=704%2C1024&ssl=1)
-
 EN
 ---
 New Update V2.1
@@ -63,6 +61,8 @@ Get Bot channel ID
 - Use this script only for legitimate purposes and with the consent of users.
 
 If you encounter any issues or have questions, please contact me or check the official documentation for the libraries used in the script.
+
+![Tester và User](https://i0.wp.com/comedymajors.com/wp-content/uploads/2024/02/tester-and-user.jpg?resize=704%2C1024&ssl=1)
 
 ---
 
@@ -129,6 +129,8 @@ lấy ID kênh bot
 - Sử dụng script này chỉ cho các mục đích hợp pháp và với sự cho phép của người dùng.
 
 Nếu bạn gặp bất kỳ vấn đề nào hoặc có câu hỏi, hãy liên hệ với tôi hoặc kiểm tra tài liệu chính thức của các thư viện sử dụng trong script.
+
+![Tester và User](https://i0.wp.com/comedymajors.com/wp-content/uploads/2024/02/tester-and-user.jpg?resize=704%2C1024&ssl=1)
 
 ---
 
