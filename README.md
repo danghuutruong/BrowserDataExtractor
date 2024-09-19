@@ -1,3 +1,5 @@
+![Visitor Badge](https://visitor-badge.glitch.me/badge?page_id=danghuutruong.BrowserDataExtractor)
+
 EN
 ---
 New Update V2.2
