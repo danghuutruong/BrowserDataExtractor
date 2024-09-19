@@ -1,12 +1,15 @@
 EN
 ---
-New Update V2.1
+New Update V2.2
 
 I have made updates and improvements with the following features:
 
-- Bug fixes and performance optimization
-- Added functionality to retrieve your Wi-Fi information and IP address
-- Reintroduced the computer configuration information collection feature
+Bug fixes and performance optimization.
+Added functionality to retrieve your Wi-Fi information and IP address.
+Updated the computer configuration information collection feature.
+Significant upgrade in retrieving browser history, cookies, and passwords.
+Retrieve common files.
+Reintroduced the old feature of network checking before sending.
 
 ### Guide for Using BrowserDataExtractor.py
 
@@ -68,13 +71,16 @@ If you encounter any issues or have questions, please contact me or check the of
 
 VI
 ---
-Cập Nhật Mới V2.1
+Cập Nhật Mới V2.2
 
 Tôi đã thực hiện cập nhật và cải thiện các tính năng sau:
 
 - Khắc phục lỗi và tối ưu hóa hiệu suất hoạt động.
 - Thêm tính năng lấy thông tin Wi-Fi và địa chỉ IP của bạn.
 - Cập nhật chức năng thu thập thông tin cấu hình máy tính.
+- nâng cấp mạnh mẽ lấy trình duyệt về lịch sử cookies và mật khẩu
+- lấy Các tập tin phổ biến
+- mang lại tính năng cũ kiểm tra mạng trước khi gửi
 
 ### Hướng Dẫn Sử Dụng Browser Data Extractor
 
