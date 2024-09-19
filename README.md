@@ -1,4 +1,4 @@
-[Tester và User](https://i0.wp.com/comedymajors.com/wp-content/uploads/2024/02/tester-and-user.jpg?resize=704%2C1024&ssl=1)
+![Tester và User](https://i0.wp.com/comedymajors.com/wp-content/uploads/2024/02/tester-and-user.jpg?resize=704%2C1024&ssl=1)
 
 EN
 ---
