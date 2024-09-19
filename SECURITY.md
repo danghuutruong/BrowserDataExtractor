@@ -1,3 +1,43 @@
+# EN
+---
+
+# Privacy Policy
+
+## 1. Purpose
+
+The purpose of the `BrowserDataExtractor` tool is to collect and manage browser data securely, including passwords, browsing history, and cookies, for educational and research purposes. The tool also collects system information and common files from the user's computer.
+
+## 2. Information Collection
+
+The `BrowserDataExtractor` tool collects the following types of information:
+- **Browser Data**: Passwords, browsing history, and cookies from various web browsers.
+- **System Information**: Details about the computer system, including operating system, CPU, GPU, RAM, and product keys.
+- **Wi-Fi Networks**: Information about saved Wi-Fi networks and their passwords.
+- **Common Files**: Files from user directories that may contain sensitive information.
+
+## 3. Use of Information
+
+Collected information is used solely to provide an overview of the system and browser data. This data helps understand the configuration and security of the user environment. The tool does not use the data for any other purpose.
+
+## 4. Data Protection
+
+The tool employs the following measures to protect the collected data:
+- **Encryption**: Sensitive data such as passwords is encrypted and decrypted using encryption methods.
+- **Secure Storage**: Data is temporarily stored in a secure directory and deleted after processing.
+- **Secure Transmission**: All data sent to Telegram is transmitted via HTTPS to ensure secure communication.
+
+## 5. Information Sharing
+
+We do not share the collected information with any third parties other than sending it via the Telegram Bot API for the intended purpose. This is to provide users with a summary of the collected information and ensure that it is transmitted securely.
+
+## 6. Contact
+
+If you have any questions or concerns about security or the use of your data, please contact us directly:
+- Email: [danghuutruong0@gmail.com](mailto:danghuutruong0@gmail.com)
+---
+# VI
+---
+
 # Chính Sách Bảo Mật
 
 ## 1. Mục Đích
