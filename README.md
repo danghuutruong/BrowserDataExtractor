@@ -2,16 +2,18 @@
 
 EN
 ---
-New Update V2.2
 
-I have made updates and improvements with the following features:
+First of all, I would like to apologize for any inconvenience encountered while using version 2.2 of the BrowserDataExtractor project. I understand that the significant bugs and issues have negatively affected your experience, and I am truly sorry for that.
 
-- Bug fixes and performance optimization.
-- Added functionality to retrieve your Wi-Fi information and IP address.
-- Updated the computer configuration information collection feature.
-- Significant upgrade in retrieving browser history, cookies, and passwords.
-- Retrieve common files.
-- Reintroduced the old feature of network checking before sending.
+I am committed to addressing the problems that have occurred. To receive feedback and support in handling any arising issues, please do not hesitate to contact us.
+
+Additionally, to improve the experience, I am now releasing the final version, v3, where we have worked hard to address the limitations of previous versions. However, some features from the older versions may be missing as expected. Version v3 will be the last update for the BrowserDataExtractor project, and we will cease further updates from this version onwards.
+
+We hope that this new version will provide an improved and final experience.
+
+Thank you very much.
+
+Please note, this project is intended for educational purposes, and I will not be held responsible.
 
 ### Guide for Using BrowserDataExtractor.py
 
@@ -73,16 +75,19 @@ If you encounter any issues or have questions, please contact me or check the of
 
 VI
 ---
-Cập Nhật Mới V2.2
 
-Tôi đã thực hiện cập nhật và cải thiện các tính năng sau:
+Trước tiên, tôi xin gửi lời xin lỗi vì những bất tiện mà gặp phải trong quá trình sử dụng phiên bản v2.2 của dự án BrowserDataExtractor. tôi hiểu rằng các lỗi lớn và các vấn đề liên quan đã ảnh hưởng không nhỏ đến trải nghiệm và tôi rất tiếc. 
 
-- Khắc phục lỗi và tối ưu hóa hiệu suất hoạt động.
-- Thêm tính năng lấy thông tin Wi-Fi và địa chỉ IP của bạn.
-- Cập nhật chức năng thu thập thông tin cấu hình máy tính.
-- nâng cấp mạnh mẽ lấy trình duyệt về lịch sử cookies và mật khẩu
-- lấy Các tập tin phổ biến
-- mang lại tính năng cũ kiểm tra mạng trước khi gửi
+tôi xin cam kết sẽ bù những vấn đề đã xảy ra. Để tiếp nhận mọi phản hồi và hỗ trợ xử lý các lỗi phát sinh, xin vui lòng liên hệ với chúng tôi. 
+
+Đồng thời, để nâng cao trải nghiệm, tôi hiện đang chia sẻ cuối cùng phiên bản v3, trong đó chúng tôi đã nỗ lực cải tiến và khắc phục những hạn chế của các phiên bản trước đó. Nhưng sẽ bị thiếu tính năng không như mong muốn phiên bản cũ. Phiên bản v3 này sẽ là bản cập nhật cuối cùng cho dự án BrowserDataExtractor, và chúng tôi sẽ ngừng các bản cập nhật mới từ phiên bản này trở đi. 
+
+Chúng tôi hy vọng phiên bản mới này sẽ mang đến một trải nghiệm tối ưu hơn và cuối cùng. 
+
+Trân trọng cảm ơn.
+
+
+Lưu ý đây là dự án mục đích giáo dục tôi sẽ không chịu trách nhiệm
 
 ### Hướng Dẫn Sử Dụng Browser Data Extractor
 
