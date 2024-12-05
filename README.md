@@ -2,7 +2,7 @@
 
 EN
 ---
-
+I came back and worked continued
 
 ### Guide for Using BrowserDataExtractor.py
 
@@ -64,6 +64,7 @@ If you encounter any issues or have questions, please contact me or check the of
 
 VI
 ---
+Tôi đã trở lại và làm việc tiếp tục
 
 ### Hướng Dẫn Sử Dụng Browser Data Extractor
 
